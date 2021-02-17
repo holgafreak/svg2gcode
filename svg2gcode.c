@@ -45,12 +45,18 @@
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
-#define GHEADER "G21\nG90\nG92\n" //add here your specific G-codes
+#define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
+#define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
                                   //separated with newline \n
-#define CUTTERON "M7\n" //I chose this, change to yours or add comment
+#define G32 1
+#ifdef G32
+#define CUTTERON "G0 M3 S%d\n"
+#else
+#define CUTTERON "M3 S%d\n" //I chose this, change to yours or add comment
                       // or add newline "\n" if not needed
-#define CUTTEROFF "M8\n" // same for this
-#define GFOOTER "G00 X0 Y0\nM11\n" //end G-code here
+#endif
+#define CUTTEROFF "M5\n" // same for this
+#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
 #define GMODE "M4\n"
 //#define DO_HPGL //uncomment to get hpgl-file named test.hpgl on current folder
 static float minf(float a, float b) { return a < b ? a : b; }
@@ -324,7 +330,7 @@ static void calcBounds(struct NSVGimage* image)
   printf("shapes %d\n",shapeCount);
 }
 //reorder  the paths to minimize cutter movement
-static void reorder(SVGPoint* pts, int* cities, int ncity) {
+static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   float dx,dy,dist,dist2;
   SVGPoint p1,p2,p3,p4;
@@ -344,16 +350,28 @@ static void reorder(SVGPoint* pts, int* cities, int ncity) {
     p4 = pts[cities[indexB+1]];
     dx = p1.x-p2.x;
     dy = p1.y-p2.y;
-    dist = dx*dx+dy*dy;
+    if(xy)
+      dist = dx*dx+dy*dy;
+    else
+      dist = dy*dy;
     dx = p3.x-p4.x;
     dy = p3.y-p4.y;
-    dist += (dx*dx+dy*dy);
+    if(xy)
+      dist += (dx*dx+dy*dy);
+    else
+      dist += dy*dy;
     dx = p1.x-p3.x;
     dy = p1.y-p3.y;
-    dist2 = dx*dx+dy*dy;
+    if(xy)
+      dist2 = dx*dx+dy*dy;
+    else
+      dist2 = dy*dy;
     dx = p2.x-p4.x;
     dy = p2.y-p4.y;
-    dist2 += (dx*dx+dy*dy);
+    if(xy)
+      dist2 += (dx*dx+dy*dy);
+    else
+      dist2 += dy*dy;
     if(dist2 < dist) {
       indexH = indexB;
       indexL = indexA+1;
@@ -371,40 +389,46 @@ static void reorder(SVGPoint* pts, int* cities, int ncity) {
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
-  printf("\t-S try to simplify hatching\n");
+  printf("\t-Y shift Y-ax\n");
+  printf("\t-X sfit X-ax\n");
   printf("\t-c use z-axis instead of laser\n");
-  printf("\t-f feed rate (8000.0)\n");
+  printf("\t-f feed rate (3500)\n");
   printf("\t-n # number of reorders (30)\n");
   printf("\t-s scale (1.0)\n");
   printf("\t-F flip Y-axis\n");
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
-  printf("\t-m machine accuracy (0.5)\n");
+  printf("\t-m machine accuracy (0.1)\n");
   printf("\t-z z-traverse (1.0)\n");
   printf("\t-Z z-engage (-1.0)\n");
   printf("\t-B do Bezier curve smoothing\n");
+  printf("\t-T engrave only TSP-path\n");
+  printf("\t-V optmize for Voronoi Stipples\n");
   printf("\t-h this help\n");
 }
 
 int main(int argc, char* argv[]) {
 
-  int i,j,k,l,first;
+  int i,j,k,l,first = 1;
   //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
   ToolPath* paths;
   int *cities,npaths;
-  float feed = 3500.0;
+  int feed = 3500;
+  //int shiftY = 30;
+  int fullspeed=4800;
   float ztraverse = 1.;
   float zengage = -1.;
   float width = -1;
+  char xy = 1;
   float w,widthInmm = -1.;
   int numReord = 30;
   float scale = 1.;
   float tol = 0.5;
   float size = 100;
-  float accuracy = 0.5;
+  float accuracy = 0.1;
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
   int flip = 0;
@@ -412,19 +436,60 @@ int main(int argc, char* argv[]) {
   int units = 0;
   int printed=0;
   int cncMode = 0;
+  int tsp = 0;
+  int tspFirst = 1;
+  int autoshift = 0;
+  float ashift = 0.;
+  int firstandonly = 2; // first svg
+  int append = 0;
+  int last = 0; // last svg
+  int waitTime = 25;
+  float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
+  float shiftX = 0.;
+  float shiftY = 0.;
+  float zeroX = 0.;
+  float zeroY = 0.;
   FILE *gcode;
+  int pwr = 90;
   int ch;
+  int dwell = -1;
+  char gbuff[128];
+  int center = 0;
+  printf("v0.0001 8.11.2020\n");
   //seed48(NULL);
   if(argc < 3) {
     help();
     return -1;
   }
   simplify = 0;
-  while((ch=getopt(argc,argv,"Bhf:n:s:Fz:Z:Sw:t:m:c")) != EOF) {
+  while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
+    case 'C': center = 1;
+      break;
+    case 'P': pwr = atoi(optarg);
+      break;
+    case 'D': waitTime=atoi(optarg);
+      dwell = atoi(optarg);
+      break;
+    case 'a': append = 1; firstandonly = 0;
+      break;
+    case 'V': xy = 0;
+      break;
+    case 'T': tsp = 1;
+      if(xy == 0)
+	xy = 1;
+      break;
     case 'c': cncMode = 1;
       break;
-    case 'S': ; //simplify = 1; //used to be a test to remove the double lines on hatching with Illustrator
+     
+    case 'Y': shiftY = atof(optarg); // shift
+      break;
+      
+     
+    case 'X': shiftX = atof(optarg); // shift
+      break;
+      
+    case 'A':autoshift = 1;
       break;
     case 'm': accuracy=atof(optarg);
       break;
@@ -432,7 +497,7 @@ int main(int argc, char* argv[]) {
       break;
     case 'h': help();
       break;
-    case 'f': feed = atof(optarg);
+    case 'f': feed = atoi(optarg);
       break;
     case 'n': numReord = atoi(optarg);
       break;
@@ -453,25 +518,47 @@ int main(int argc, char* argv[]) {
       break;
     }
   }
-
-  g_image = nsvgParseFromFile(argv[optind],"mm",0.1);
+  if(shiftY != 30. && flip == 1)
+    shiftY = -shiftY;
+  g_image = nsvgParseFromFile(argv[optind],"px",96);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
   }
   calcBounds(g_image);
+  fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
+  fprintf(stderr,"width %f\n",width);
   w = fabs(bounds[0]-bounds[2]);
-  if(scale == 1.0 && widthInmm != -1.0) 
+  if(widthInmm != -1.0) 
     scale = widthInmm/w;
+  fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
+  zeroX = -bounds[0];
+  zeroY = -bounds[1];
+  /* old code
+  if(bounds[0] < 0)
+    zeroX = fabs(bounds[0]);
+  if(bounds[2] < 0)
+    zeroY = fabs(bounds[1]);
+  //shiftY = shiftY+zeroY+scale*fabs(bounds[1]-bounds[3])/2.;
+  //shiftX = shiftX+zeroX+scale*fabs(bounds[0]-bounds[2])/2.;
+  // if(center == 0.) {
+  //  shiftX = 0.;
+  //  shiftY = 0.;
+  //}
+  */
+
 #ifdef _WIN32
 seedrand((float)time(0));
 #endif
+ if(append)
+   gcode = fopen(argv[optind+1],"a");
+ else
   gcode=fopen(argv[optind+1],"w");
-  if(gcode == NULL) {
-    printf("can't open output %s\n",argv[optind+1]);
-    return -1;
-  }
+ if(gcode == NULL) {
+   printf("can't open output %s\n",argv[optind+1]);
+   return -1;
+ }
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
@@ -491,16 +578,22 @@ seedrand((float)time(0));
   */
   printf("reorder ");
   for(k=0;k<numReord;k++) {
-    reorder(points,cities,pathCount);
+    reorder(points,cities,pathCount,xy);
     printf("%d... ",k);
     fflush(stdout);
   }
   printf("\n");
-  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",(bounds[0]*scale),(bounds[1]*scale),(bounds[2]*scale),(bounds[3]*scale),npaths);
-
-  fprintf(gcode,GHEADER);
+  //  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",((zeroX+shiftX+ bounds[0])*scale),((zeroY+shiftY+bounds[1])*scale),((zeroX+shiftX+bounds[2])*scale),((zeroY+shiftY+bounds[3])*scale),npaths);
+  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",shiftX+ (zeroX + bounds[0])*scale,shiftY+(zeroY+bounds[1])*scale,shiftX+(zeroX+bounds[2])*scale,shiftY+(zeroY+bounds[3])*scale,npaths);
+  if(first) {
+    fprintf(gcode,GHEADER);
+    //fprintf(gcode,"G05 P%d\n",pwr);
+  }
   if(cncMode) //cnc-mode can use z-axis
     fprintf(gcode,GMODE);
+#ifdef G32
+  fprintf(gcode,CUTTERON,pwr);
+#endif  
   k=0;
   i=0;
   for(i=0;i<pathCount;i++) {
@@ -514,18 +607,49 @@ seedrand((float)time(0));
       //printf("k > \n");
       continue;
     }
-    firstx = x = (paths[k].points[0]-bounds[0])*scale;
-    firsty = y =  (flip ? (bounds[3]-paths[k].points[1])*scale : (paths[k].points[1]-bounds[1])*scale);
+    firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
+    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY; // changed
+    if(flip) {
+      firsty = -firsty;
+      y = -y;
+    }
+    if(x > maxx)
+      maxx = x;
+    if(x < minx)
+      minx = x;
+    if(y > maxy)
+      maxy = y;
+    if(y < miny)
+      miny = y;
+    if(tsp) {
+      if(tspFirst) {
+	fprintf(gcode,"G1 X%.4f Y%.4f F4800 \n",x,y);
+	fprintf(gcode,"G4 P0\n");
+	tspFirst = 0;
+	fprintf(gcode,CUTTERON,pwr);
+      }
+      else {
+	fprintf(gcode,"G1 X%.1f Y%.1f  F%d\n",x,y,feed);
+	fprintf(gcode,"G4 P0\n");
+      }
+      continue;
+    }
     if(!cncMode)
-      fprintf(gcode,"G00 X%.1f Y%.1f Z%.1f\n",x,y,ztraverse);
+      fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+#ifndef G32
     else
-      fprintf(gcode,"G00 X%.1f Y%.1f\n",x,y);
+      fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
+    fprintf(gcode,"G4 P0\n");
+#endif    
     fprintf(gcode,"( city %d )\n",paths[k].city);
+#ifndef G32    
     if(!cncMode)
-      fprintf(gcode,CUTTERON);
-    else
-      fprintf(gcode,"G01 Z%.1f F%.1f\n",zengage,feed);
+      fprintf(gcode,CUTTERON,pwr);
+    fprintf(gcode,"G4 P0\n");
+#endif
     printed=0;
+    if(tsp)
+      continue;
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
@@ -550,33 +674,84 @@ seedrand((float)time(0));
 	      printf("bezPoints y %d\n",l);
 	      continue;
 	    }
-	    bx = (bezPoints[l].x-bounds[0])*scale;
-	    by = (flip ? (bounds[3]-bezPoints[l].y)*scale : (bezPoints[l].y-bounds[1])*scale);
+	    bx = (bezPoints[l].x+zeroX)*scale+shiftX;
+	    by = (bezPoints[l].y+zeroY)*scale+shiftY;
+	    if(flip)
+	      by = -by;
+	    if(bx > maxx)
+	      maxx = bx;
+	    if(bx < minx)
+	      minx = x;
+	    if(by > maxy)
+	      maxy = by;
+	    if(y < miny)
+	      miny = by;
+	    
 	    d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
-	    fprintf(gcode,"G01 X%.1f Y%.1f Z%.1f F%.1f\n",bx,by,zengage,feed);
+	    if(1) {
+	      printed = 1;
+	      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
+#ifndef	  G32    
+	      fprintf(gcode,"G4 P0\n");
+#endif	      
+	    } else {
+	      fprintf(gcode,"( acc )\n");;//continue;
+	      //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
+	      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n",bx,by,feed);
+	    }
 	    bxold = bx;
 	    byold = by;
 	  }
 	} else {
-	  x = (paths[j].points[0]-bounds[0])*scale;
-	  y = (flip ? (bounds[3]-paths[j].points[1])*scale : (paths[j].points[1]-bounds[1])*scale);
+	  x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
+	  y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
+	  if(flip)
+	    y = -y;
+	  if(x > maxx)
+	    maxx = x;
+	  if(x < minx)
+	    minx = x;
+	  if(y > maxy)
+	    maxy = y;
+	  if(y < miny)
+	    miny = y;
+
 //	  if(paths[j].points[0]==paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) {
 	  if(1) {
-	    d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
-	    fprintf(gcode,"G01 X%.1f Y%.1f Z%.1f F%.1f\n",x,y,zengage,feed);
+	    //d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
+	    if(1) {
+	      printed = 1;
+	      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
+#ifndef	 G32 
+	      fprintf(gcode,"G4 P0\n");
+#endif
+	    } else {
+	      ;//continue;
+	      //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
+	      //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
+	    }
 	    first = 0;
 	    xold = x;
 	    yold = y;
 	  } else {
-	    x = (paths[j].points[0]-bounds[0])*scale;
-	    y = (flip ? (bounds[3]-paths[j].points[1])*scale : (paths[j].points[1]-bounds[1])*scale);
+	    x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
+	    y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
+	    if(flip)
+	      y = -y;
 	    fprintf(gcode,CUTTEROFF);
 	    fprintf(gcode,"( simplified )\n");
-	    fprintf(gcode,"G00 X%.1f Y%.1f Z%.1f\n",x,y,ztraverse);
-	    x = (paths[j].points[2]-bounds[0])*scale;
-	    y = (flip ? (bounds[3]-paths[j].points[3])*scale : (paths[j].points[3]-bounds[1])*scale);
-	    fprintf(gcode,CUTTERON);
-	    //fprintf(gcode,"G01 X%.1f Y%.1f Z%.1f F%.1f\n",x,y,zengage,feed);
+	    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+#ifndef G32	    
+	    fprintf(gcode,"G4 P0\n");
+#endif	    
+	    x = (paths[j].points[2]-fabs(bounds[0]))*scale+shiftX;
+	    y = (paths[j].points[3]-fabs(bounds[1]))*scale+shiftY;
+	    if(flip)
+	      y = -y;
+#ifndef	 G32  
+	    fprintf(gcode,CUTTERON,pwr);
+#endif	    
+	    //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
 	    xold = x;
 	    yold = y;
 	  }
@@ -585,30 +760,63 @@ seedrand((float)time(0));
 	/*
 	if(printed == 0) {
 	  if(doBez)
-	    fprintf(gcode,"G01 X%.1f Y%.1f Z%.1f F%.1f\n",bx,by,zengage,feed);
+	    fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",bx,by,feed);
 	  else
-	    fprintf(gcode,"G01 X%.1f Y%.1f Z%.1f F%.1f\n",x,y,zengage,feed);
+	    fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
 	}
 	*/
       } else
 	break;
     }
-    if(paths[j].closed && !simplify) {
+    if(tsp)
+      continue;
+    if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
       //bx = (bezPoints[0].x-bounds[0])*scale;
       //by = (flip ? (bounds[3]-bezPoints[0].y)*scale : (bezPoints[0].y-bounds[1])*scale);
       
-      fprintf(gcode,"G01 X%.1f y%.1f Z%.1f F%.1f\n",firstx,firsty,zengage,feed);
+      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
+#ifndef G32      
+      fprintf(gcode,"G4 P0\n");
+#endif      
+      printed = 1;
     }
-    if(!cncMode)
+    if(!cncMode) {
+      if(!printed) {
+#ifndef G32	
+	if(dwell != -1) {
+	  fprintf(gcode,"( lowpwr )\n");
+	  fprintf(gcode,"M3 S10\n");
+	  sprintf(gbuff,"G4 P%d\n",dwell);
+	  fprintf(gcode,"%s",gbuff);
+	}
+	fprintf(gcode,"M5\n");
+#else
+	fprintf(gcode,"( new dwell? )\n");
+#endif	
+	//fprintf(gcode,"G05 P%d\n",pwr);
+      }
+#ifndef G32      
       fprintf(gcode,CUTTEROFF);
-    else
-      fprintf(gcode,"G01 Z%f F%.1f\n",ztraverse,feed);
+#endif      
+    } else {
+      fprintf(gcode,"G1 ZF%d\n",feed);
+      fprintf(gcode,"G4 P0\n");
+      printed = 0;
+    } 
   }
+#ifndef G32  
+  if(tsp)
+    fprintf(gcode,CUTTEROFF);
+#else
+  fprintf(gcode,"M5\n");
+#endif  
   fprintf(gcode,GFOOTER);
+  printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
+  fprintf(gcode,"( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
-  free(cities);
+  free(cities); 
   free(paths);
   nsvgDelete(g_image);
   return 0;
