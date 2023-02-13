@@ -48,7 +48,7 @@
 #define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
 #define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
                                   //separated with newline \n
-#define G32 1
+#define G32 0
 #ifdef G32
 #define CUTTERON "G0 M3 S%d\n"
 #else
@@ -56,14 +56,15 @@
                       // or add newline "\n" if not needed
 #endif
 #define CUTTEROFF "M5\n" // same for this
-#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
+#define GFOOTER "M30\n"
+//#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
 #define GMODE "M4\n"
 //#define DO_HPGL //uncomment to get hpgl-file named test.hpgl on current folder
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
-static int doBez = 0;
+static int doBez = 1;
 static int simplify = 0;
 static struct NSVGimage* g_image = NULL;
 
@@ -399,15 +400,12 @@ void help() {
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
   printf("\t-m machine accuracy (0.1)\n");
-  printf("\t-z z-traverse (1.0)\n");
   printf("\t-Z z-engage (-1.0)\n");
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-T engrave only TSP-path\n");
   printf("\t-V optmize for Voronoi Stipples\n");
   printf("\t-h this help\n");
-}
-
-int main(int argc, char* argv[]) {
+}int main(int argc, char* argv[]) {
 
   int i,j,k,l,first = 1;
   //struct NSVGimage* image;
@@ -419,23 +417,24 @@ int main(int argc, char* argv[]) {
   int feed = 3500;
   //int shiftY = 30;
   int fullspeed=4800;
-  float ztraverse = 1.;
+  float zFloor = -1.;
+  float ztraverse = -1.;
   float zengage = -1.;
   float width = -1;
   char xy = 1;
   float w,widthInmm = -1.;
   int numReord = 30;
-  float scale = 1.;
-  float tol = 0.5;
+  float scale = 0.15;
+  float tol = 0.2;
   float size = 100;
   float accuracy = 0.1;
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
-  int flip = 0;
+  int flip = 1;
   int skip = 0;
   int units = 0;
   int printed=0;
-  int cncMode = 0;
+  int cncMode = 1;
   int tsp = 0;
   int tspFirst = 1;
   int autoshift = 0;
@@ -507,9 +506,9 @@ int main(int argc, char* argv[]) {
       break;
     case 'F': flip = 1;
       break;
-    case 'z': ztraverse = atof(optarg);
-      break;
-    case 'Z': zengage = atof(optarg);
+    case 'Z': zFloor = atof(optarg);
+              ztraverse = zFloor+5.;
+              fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
       break;
@@ -642,6 +641,7 @@ seedrand((float)time(0));
     fprintf(gcode,"G4 P0\n");
 #endif    
     fprintf(gcode,"( city %d )\n",paths[k].city);
+    fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
 #ifndef G32    
     if(!cncMode)
       fprintf(gcode,CUTTERON,pwr);
@@ -800,7 +800,7 @@ seedrand((float)time(0));
       fprintf(gcode,CUTTEROFF);
 #endif      
     } else {
-      fprintf(gcode,"G1 ZF%d\n",feed);
+      fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
       fprintf(gcode,"G4 P0\n");
       printed = 0;
     } 
