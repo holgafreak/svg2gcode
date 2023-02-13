@@ -404,8 +404,7 @@ void help() {
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-T engrave only TSP-path\n");
   printf("\t-V optmize for Voronoi Stipples\n");
-  printf("\t-h this help\n");
-}int main(int argc, char* argv[]) {
+  printf("\t-h this help\n");}int main(int argc, char* argv[]) {
 
   int i,j,k,l,first = 1;
   //struct NSVGimage* image;
@@ -417,6 +416,7 @@ void help() {
   int feed = 3500;
   //int shiftY = 30;
   int fullspeed=4800;
+  int cityStart=1;
   float zFloor = -1.;
   float ztraverse = -1.;
   float zengage = -1.;
@@ -425,9 +425,9 @@ void help() {
   float w,widthInmm = -1.;
   int numReord = 30;
   float scale = 0.15;
-  float tol = 0.2;
+  float tol = 0.1; //smaller is better
   float size = 100;
-  float accuracy = 0.1;
+  float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
   int flip = 1;
@@ -474,8 +474,8 @@ void help() {
       break;
     case 'V': xy = 0;
       break;
-    case 'T': tsp = 1;
-      if(xy == 0)
+    // case 'T': tsp = 1;
+    //   if(xy == 0)
 	xy = 1;
       break;
     case 'c': cncMode = 1;
@@ -534,18 +534,6 @@ void help() {
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
   zeroX = -bounds[0];
   zeroY = -bounds[1];
-  /* old code
-  if(bounds[0] < 0)
-    zeroX = fabs(bounds[0]);
-  if(bounds[2] < 0)
-    zeroY = fabs(bounds[1]);
-  //shiftY = shiftY+zeroY+scale*fabs(bounds[1]-bounds[3])/2.;
-  //shiftX = shiftX+zeroX+scale*fabs(bounds[0]-bounds[2])/2.;
-  // if(center == 0.) {
-  //  shiftX = 0.;
-  //  shiftY = 0.;
-  //}
-  */
 
 #ifdef _WIN32
 seedrand((float)time(0));
@@ -566,15 +554,6 @@ seedrand((float)time(0));
   
   npaths = 0;
   calcPaths(points,paths,cities,&npaths);
-  /*  if(doBez) {
-    Bez = fopen("bez.lst","w");
-    if(Bez == NULL) {
-      printf("bez file!\n");
-      return -1;
-    }
-    fprintf(Bez,"paths = %d\n",npaths);
-  }
-  */
   printf("reorder ");
   for(k=0;k<numReord;k++) {
     reorder(points,cities,pathCount,xy);
@@ -583,7 +562,7 @@ seedrand((float)time(0));
   }
   printf("\n");
   //  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",((zeroX+shiftX+ bounds[0])*scale),((zeroY+shiftY+bounds[1])*scale),((zeroX+shiftX+bounds[2])*scale),((zeroY+shiftY+bounds[3])*scale),npaths);
-  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",shiftX+ (zeroX + bounds[0])*scale,shiftY+(zeroY+bounds[1])*scale,shiftX+(zeroX+bounds[2])*scale,shiftY+(zeroY+bounds[3])*scale,npaths);
+  //  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",shiftX+ (zeroX + bounds[0])*scale,shiftY+(zeroY+bounds[1])*scale,shiftX+(zeroX+bounds[2])*scale,shiftY+(zeroY+bounds[3])*scale,npaths);
   if(first) {
     fprintf(gcode,GHEADER);
     //fprintf(gcode,"G05 P%d\n",pwr);
@@ -596,11 +575,17 @@ seedrand((float)time(0));
   k=0;
   i=0;
   for(i=0;i<pathCount;i++) {
+    cityStart=1;
+    //fprintf(gcode,"New city? City start = %d\n",cityStart);
     for(k=0;k<npaths;k++) {
-      if(paths[k].city == -1)
-	continue;
-      if(paths[k].city == cities[i])
-	break;
+      //fprintf(stderr, "npaths = %d\n",npaths);
+      if(paths[k].city == -1){
+	      continue;
+      }
+      if(paths[k].city == cities[i]) {
+        //fprintf(stderr,"New city at i=%d k=%d?\n",i,k);
+        break;
+      }
     }
     if(k >= npaths-1) {
       //printf("k > \n");
@@ -620,34 +605,37 @@ seedrand((float)time(0));
       maxy = y;
     if(y < miny)
       miny = y;
-    if(tsp) {
-      if(tspFirst) {
-	fprintf(gcode,"G1 X%.4f Y%.4f F4800 \n",x,y);
-	fprintf(gcode,"G4 P0\n");
-	tspFirst = 0;
-	fprintf(gcode,CUTTERON,pwr);
-      }
-      else {
-	fprintf(gcode,"G1 X%.1f Y%.1f  F%d\n",x,y,feed);
-	fprintf(gcode,"G4 P0\n");
-      }
-      continue;
-    }
-    if(!cncMode)
+    // if(tsp) { //not tsp
+    //   if(tspFirst) {
+    //   fprintf(gcode,"G1 X%.4f Y%.4f F4800 \n",x,y);
+    //   fprintf(gcode,"G4 P0\n");
+    //   tspFirst = 0;
+    //   fprintf(gcode,CUTTERON,pwr);
+    //   }
+    //   else {
+    //     fprintf(gcode,"G1 X%.1f Y%.1f  F%d\n",x,y,feed);
+    //     fprintf(gcode,"G4 P0\n");
+    //   }
+    //   continue;
+    // } //not tsp
+    if(!cncMode) //we are in cnc mode
       fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
 #ifndef G32
     else
       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
-    fprintf(gcode,"G4 P0\n");
+      fprintf(gcode,"G4 P0\n");
 #endif    
-    fprintf(gcode,"( city %d )\n",paths[k].city);
-    fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+    //start of city. want to have first move in a city+lower here.
+    //fprintf(stderr,"Starting new city=%d at i=%d k=%d\n",paths[k].city,i,k);
+    //fprintf(gcode,"( city %d )\n",paths[k].city);
+    //fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
 #ifndef G32    
     if(!cncMode)
       fprintf(gcode,CUTTERON,pwr);
     fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
+    //fprintf(stderr, "Printed = %d?\n",printed);
     if(tsp)
       continue;
     for(j=k;j<npaths;j++) {
@@ -656,117 +644,110 @@ seedrand((float)time(0));
       //printf("bezC %d\n",bezCount);
       skip = 0;
       first = 1;
-
       if(paths[j].city == cities[i]) {
-	if(doBez) {
-	  bezCount = 0;
-	  if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
-	    ;//continue;
-	  cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
-	  bxold=x;
-	  byold=y;
-	  for(l=0;l<bezCount;l++) {
-	    if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
-	      printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
-	      continue;
-	    }
-	    if(bezPoints[l].y > bounds[3]) {
-	      printf("bezPoints y %d\n",l);
-	      continue;
-	    }
-	    bx = (bezPoints[l].x+zeroX)*scale+shiftX;
-	    by = (bezPoints[l].y+zeroY)*scale+shiftY;
-	    if(flip)
-	      by = -by;
-	    if(bx > maxx)
-	      maxx = bx;
-	    if(bx < minx)
-	      minx = x;
-	    if(by > maxy)
-	      maxy = by;
-	    if(y < miny)
-	      miny = by;
-	    
-	    d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
-	    if(1) {
-	      printed = 1;
-	      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-#ifndef	  G32    
-	      fprintf(gcode,"G4 P0\n");
-#endif	      
-	    } else {
-	      fprintf(gcode,"( acc )\n");;//continue;
-	      //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
-	      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n",bx,by,feed);
-	    }
-	    bxold = bx;
-	    byold = by;
-	  }
-	} else {
-	  x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-	  y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-	  if(flip)
-	    y = -y;
-	  if(x > maxx)
-	    maxx = x;
-	  if(x < minx)
-	    minx = x;
-	  if(y > maxy)
-	    maxy = y;
-	  if(y < miny)
-	    miny = y;
+        if(doBez) { //we always do bez
+            bezCount = 0;
+            if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
+              ;//continue;
+            cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
+            bxold=x;
+            byold=y;
+            for(l=0;l<bezCount;l++) {
+              if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
+                printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
+                continue;
+              }
+              if(bezPoints[l].y > bounds[3]) {
+                printf("bezPoints y %d\n",l);
+                continue;
+              }
+              bx = (bezPoints[l].x+zeroX)*scale+shiftX;
+              by = (bezPoints[l].y+zeroY)*scale+shiftY;
+              if(flip)
+                by = -by;
+              if(bx > maxx)
+                maxx = bx;
+              if(bx < minx)
+                minx = x;
+              if(by > maxy)
+                maxy = by;
+              if(y < miny)
+                miny = by;
+              
+              d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
+              printed = 1;
+              //fprintf(stderr,"printed = 1\n");
+              fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
+              if(cityStart==1){
+                fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+                cityStart = 0;
+              }
+              // fprintf(gcode, "Writing to *gcode line k=%d\n",k);
+              // fflush(gcode);
+              // fsync(fileno(gcode));
+        #ifndef	  G32    
+                fprintf(gcode,"G4 P0\n");
+        #endif	      
+              bxold = bx;
+              byold = by;
+            }
+          } else {
+            x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
+            y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
+            if(flip)
+              y = -y;
+            if(x > maxx)
+              maxx = x;
+            if(x < minx)
+              minx = x;
+            if(y > maxy)
+              maxy = y;
+            if(y < miny)
+              miny = y;
 
-//	  if(paths[j].points[0]==paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) {
-	  if(1) {
-	    //d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
-	    if(1) {
-	      printed = 1;
-	      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
-#ifndef	 G32 
-	      fprintf(gcode,"G4 P0\n");
-#endif
-	    } else {
-	      ;//continue;
-	      //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
-	      //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-	    }
-	    first = 0;
-	    xold = x;
-	    yold = y;
-	  } else {
-	    x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-	    y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-	    if(flip)
-	      y = -y;
-	    fprintf(gcode,CUTTEROFF);
-	    fprintf(gcode,"( simplified )\n");
-	    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-#ifndef G32	    
-	    fprintf(gcode,"G4 P0\n");
-#endif	    
-	    x = (paths[j].points[2]-fabs(bounds[0]))*scale+shiftX;
-	    y = (paths[j].points[3]-fabs(bounds[1]))*scale+shiftY;
-	    if(flip)
-	      y = -y;
-#ifndef	 G32  
-	    fprintf(gcode,CUTTERON,pwr);
-#endif	    
-	    //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-	    xold = x;
-	    yold = y;
-	  }
-	}
-	paths[j].city = -1;
-	/*
-	if(printed == 0) {
-	  if(doBez)
-	    fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",bx,by,feed);
-	  else
-	    fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-	}
-	*/
+        //	  if(paths[j].points[0]==paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) {
+            if(1) {
+              //d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
+              if(1) {
+                printed = 1;
+                fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
+        #ifndef	 G32 
+                fprintf(gcode,"G4 P0\n");
+        #endif
+              } else {
+                ;//continue;
+                //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
+                //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
+              }
+              first = 0;
+              xold = x;
+              yold = y;
+            } else {
+              x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
+              y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
+              if(flip)
+                y = -y;
+              fprintf(gcode,CUTTEROFF);
+              //fprintf(gcode,"( simplified )\n");
+              fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+        #ifndef G32	    
+              fprintf(gcode,"G4 P0\n");
+        #endif	    
+              x = (paths[j].points[2]-fabs(bounds[0]))*scale+shiftX;
+              y = (paths[j].points[3]-fabs(bounds[1]))*scale+shiftY;
+              if(flip)
+                y = -y;
+        #ifndef	 G32  
+              fprintf(gcode,CUTTERON,pwr);
+        #endif	    
+              //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
+              xold = x;
+              yold = y;
+            }
+          }
+          paths[j].city = -1;
       } else
-	break;
+	        break;
     }
     if(tsp)
       continue;
@@ -785,14 +766,14 @@ seedrand((float)time(0));
       if(!printed) {
 #ifndef G32	
 	if(dwell != -1) {
-	  fprintf(gcode,"( lowpwr )\n");
+	  //fprintf(gcode,"( lowpwr )\n");
 	  fprintf(gcode,"M3 S10\n");
 	  sprintf(gbuff,"G4 P%d\n",dwell);
 	  fprintf(gcode,"%s",gbuff);
 	}
 	fprintf(gcode,"M5\n");
 #else
-	fprintf(gcode,"( new dwell? )\n");
+	//fprintf(gcode,"( new dwell? )\n");
 #endif	
 	//fprintf(gcode,"G05 P%d\n",pwr);
       }
@@ -803,6 +784,7 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
       fprintf(gcode,"G4 P0\n");
       printed = 0;
+      //fprintf(stderr, "Printed =0\n");
     } 
   }
 #ifndef G32  
@@ -813,7 +795,7 @@ seedrand((float)time(0));
 #endif  
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
-  fprintf(gcode,"( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
+  //fprintf(gcode,"( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
   free(cities); 
