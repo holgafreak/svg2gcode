@@ -434,7 +434,7 @@ void help() {
   int skip = 0;
   int units = 0;
   int printed=0;
-  int cncMode = 1;
+  int cncMode = 0;
   int tsp = 0;
   int tspFirst = 1;
   int autoshift = 0;
@@ -618,7 +618,8 @@ seedrand((float)time(0));
     //   }
     //   continue;
     // } //not tsp
-    if(!cncMode) //we are in cnc mode
+    if(!cncMode)
+      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
 #ifndef G32
     else
@@ -626,16 +627,17 @@ seedrand((float)time(0));
       fprintf(gcode,"G4 P0\n");
 #endif    
     //start of city. want to have first move in a city+lower here.
-    //fprintf(stderr,"Starting new city=%d at i=%d k=%d\n",paths[k].city,i,k);
-    //fprintf(gcode,"( city %d )\n",paths[k].city);
-    //fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+    fprintf(gcode,"( city %d )\n",paths[k].city);
+    if(cityStart ==1){
+          fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+          cityStart = 0;
+    }
 #ifndef G32    
     if(!cncMode)
       fprintf(gcode,CUTTERON,pwr);
     fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
-    //fprintf(stderr, "Printed = %d?\n",printed);
     if(tsp)
       continue;
     for(j=k;j<npaths;j++) {
@@ -752,10 +754,9 @@ seedrand((float)time(0));
     if(tsp)
       continue;
     if(paths[j].closed) {
+      //may need to add cityStart cond
       fprintf(gcode, "( end )\n");
-      //bx = (bezPoints[0].x-bounds[0])*scale;
-      //by = (flip ? (bounds[3]-bezPoints[0].y)*scale : (bezPoints[0].y-bounds[1])*scale);
-      
+      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
 #ifndef G32      
       fprintf(gcode,"G4 P0\n");
