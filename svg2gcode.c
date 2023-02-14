@@ -317,18 +317,20 @@ static void calcBounds(struct NSVGimage* image)
   for (shape = image->shapes; shape != NULL; shape = shape->next) {
     for (path = shape->paths; path != NULL; path = path->next) {
       for (i = 0; i < path->npts-1; i++) {
-	float* p = &path->pts[i*2];
-	bounds[0] = minf(bounds[0], p[0]);
-	bounds[1] = minf(bounds[1], p[1]);
-	bounds[2] = maxf(bounds[2], p[0]);
-	bounds[3] = maxf(bounds[3], p[1]);
-	pointsCount++;
+        float* p = &path->pts[i*2];
+        bounds[0] = minf(bounds[0], p[0]);
+        bounds[1] = minf(bounds[1], p[1]);
+        bounds[2] = maxf(bounds[2], p[0]);
+        bounds[3] = maxf(bounds[3], p[1]);
+	      pointsCount++;
       }
       pathCount++;
     }
     shapeCount++;
   }
-  printf("shapes %d\n",shapeCount);
+  printf("In calcBounds:\n");
+  printf("pathCount = %d\n", pathCount);
+  printf("shapeCount = %d\n",shapeCount);
 }
 //reorder  the paths to minimize cutter movement
 static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
@@ -404,8 +406,9 @@ void help() {
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-T engrave only TSP-path\n");
   printf("\t-V optmize for Voronoi Stipples\n");
-  printf("\t-h this help\n");}int main(int argc, char* argv[]) {
-
+  printf("\t-h this help\n");}
+  
+  int main(int argc, char* argv[]) {
   int i,j,k,l,first = 1;
   //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
@@ -424,7 +427,7 @@ void help() {
   char xy = 1;
   float w,widthInmm = -1.;
   int numReord = 30;
-  float scale = 0.15;
+  float scale = 0.15; //make this dynamic
   float tol = 0.1; //smaller is better
   float size = 100;
   float accuracy = 0.05; //smaller is better
@@ -474,8 +477,6 @@ void help() {
       break;
     case 'V': xy = 0;
       break;
-    // case 'T': tsp = 1;
-    //   if(xy == 0)
 	xy = 1;
       break;
     case 'c': cncMode = 1;
@@ -484,15 +485,12 @@ void help() {
     case 'Y': shiftY = atof(optarg); // shift
       break;
       
-     
     case 'X': shiftX = atof(optarg); // shift
       break;
       
     case 'A':autoshift = 1;
       break;
     case 'm': accuracy=atof(optarg);
-      break;
-    case 'B': doBez = 1;
       break;
     case 'h': help();
       break;
@@ -517,6 +515,7 @@ void help() {
       break;
     }
   }
+  
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   g_image = nsvgParseFromFile(argv[optind],"px",96);
@@ -561,17 +560,14 @@ seedrand((float)time(0));
     fflush(stdout);
   }
   printf("\n");
-  //  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",((zeroX+shiftX+ bounds[0])*scale),((zeroY+shiftY+bounds[1])*scale),((zeroX+shiftX+bounds[2])*scale),((zeroY+shiftY+bounds[3])*scale),npaths);
-  //  fprintf(gcode,"( bounds %f %f %f %f paths %d)\n",shiftX+ (zeroX + bounds[0])*scale,shiftY+(zeroY+bounds[1])*scale,shiftX+(zeroX+bounds[2])*scale,shiftY+(zeroY+bounds[3])*scale,npaths);
   if(first) {
     fprintf(gcode,GHEADER);
-    //fprintf(gcode,"G05 P%d\n",pwr);
   }
-  if(cncMode) //cnc-mode can use z-axis
-    fprintf(gcode,GMODE);
+  if(cncMode) {fprintf(gcode,GMODE);}; //cnc-mode can use z-axis. AIDAN: Want to pull out cncMode for our purposes.
 #ifdef G32
   fprintf(gcode,CUTTERON,pwr);
 #endif  
+  //Being looping through shapes and stuff
   k=0;
   i=0;
   for(i=0;i<pathCount;i++) {
@@ -580,6 +576,7 @@ seedrand((float)time(0));
     for(k=0;k<npaths;k++) {
       //fprintf(stderr, "npaths = %d\n",npaths);
       if(paths[k].city == -1){
+        //fprintf(stderr,"Paths[k],city == -1\n");
 	      continue;
       }
       if(paths[k].city == cities[i]) {
@@ -635,7 +632,7 @@ seedrand((float)time(0));
 #ifndef G32    
     if(!cncMode)
       fprintf(gcode,CUTTERON,pwr);
-    fprintf(gcode,"G4 P0\n");
+      fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
     if(tsp)
