@@ -515,6 +515,7 @@ void help() {
       break;
     }
   }
+  
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   g_image = nsvgParseFromFile(argv[optind],"px",96);
