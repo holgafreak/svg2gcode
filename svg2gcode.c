@@ -65,7 +65,6 @@ static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static int doBez = 1;
-static int simplify = 0;
 static struct NSVGimage* g_image = NULL;
 
 typedef struct {
@@ -193,77 +192,53 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-// get all paths and add a city for each path		  
+// get all paths and paths to cities
 static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths) {
-struct NSVGshape* shape;
+  struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
-  int i,j,k,l,p,b;
+  int i,j,k,l,p,b,bezCount;
   SVGPoint* pts;
 #ifdef DO_HPGL 
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
 #endif
+  bezCount=0;
   i=0;
   k=0;
   j=0;
   p=0;
   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
      for(path = shape->paths; path != NULL; path=path->next) {
-       if(path->closed && simplify) {
-	 pts = (SVGPoint*)malloc(path->npts*sizeof(SVGPoint));
+      for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
+        float *pp = &path->pts[j*2];
+        if(j==0) {
 	
-	 for(l=0;l<path->npts-1;l++) {
-	   float *pp=&path->pts[l*2];
-	   if(l==0) {
-	     points[i].x = pp[0];
-	     points[i].y = pp[1];
-	   }
-	   pts[l].x = pp[0];
-	   pts[l].y = pp[1];
-	 }
-	 qsort((void*)pts,path->npts-1,sizeof(SVGPoint),pcomp);
-	 paths[k].points[0] = pts[path->npts-2].x;
-	 paths[k].points[1] = pts[path->npts-2].y;
-	 paths[k].points[2] = pts[0].x;
-	 paths[k].points[3] = pts[0].y;
-	 paths[k].closed = path->closed;
-	 paths[k].city = i; 
-	 k++;
-	 //fprintf(stderr,"i %d pts %f %f %f %f\n",i,pts[path->npts-2].x,pts[path->npts-2].y,pts[0].x,pts[0].y);
-	 free(pts);
-	 
-	 goto cont;
-       }
-
-       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
-	 float *pp = &path->pts[j*2];
-	 if(j==0) {
-	
-	   points[i].x = pp[0];
-	   points[i].y = pp[1];
+        points[i].x = pp[0];
+        points[i].y = pp[1];
 #ifdef DO_HPGL
-	   fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
-	   fflush(f);
-	 
-	 } else {
-	   fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
-	   fflush(f);
+        fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
+        fflush(f);
+	      } else {
+        fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
+        fflush(f);
 #endif
-	 }
-	 if(doBez) {
-	   for(b=0;b<8;b++)
-	     paths[k].points[b]=pp[b];
-	 } else {
-	   paths[k].points[0] = pp[0];
-	   paths[k].points[1] = pp[1];
-	   paths[k].points[2] = pp[0];
-	   paths[k].points[3] = pp[1];
-	 }
-	 paths[k].closed = path->closed;
-	 paths[k].city = i; 
-	 k++;
-
+	      }
+        if(doBez) {
+          bezCount++;
+          printf("DoBez in calcPaths. Bez#%d\n", bezCount);
+          for(b=0;b<8;b++){
+            paths[k].points[b]=pp[b];
+          }
+        } else {
+          paths[k].points[0] = pp[0];
+          paths[k].points[1] = pp[1];
+          paths[k].points[2] = pp[0];
+          paths[k].points[3] = pp[1];
+        }
+        paths[k].closed = path->closed;
+        paths[k].city = i; 
+        k++;
        }
      cont:       
        if(k>pointsCount) {
@@ -426,7 +401,7 @@ void help() {
   float width = -1;
   char xy = 1;
   float w,widthInmm = -1.;
-  int numReord = 30;
+  int numReord = 30; //
   float scale = 0.15; //make this dynamic
   float tol = 0.1; //smaller is better
   float size = 100;
@@ -435,7 +410,7 @@ void help() {
   float xold,yold;
   int flip = 1; //may want to pull out.
   int skip = 0;
-  int units = 0;
+  //int units = 0;
   int printed=0;
   int cncMode = 0;
   int tsp = 0;
@@ -463,7 +438,6 @@ void help() {
     help();
     return -1;
   }
-  simplify = 0;
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
     case 'C': center = 1;
