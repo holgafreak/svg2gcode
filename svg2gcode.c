@@ -433,7 +433,7 @@ void help() {
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
-  int flip = 1;
+  int flip = 1; //may want to pull out.
   int skip = 0;
   int units = 0;
   int printed=0;
@@ -481,13 +481,10 @@ void help() {
       break;
     case 'c': cncMode = 1;
       break;
-     
     case 'Y': shiftY = atof(optarg); // shift
       break;
-      
     case 'X': shiftX = atof(optarg); // shift
       break;
-      
     case 'A':autoshift = 1;
       break;
     case 'm': accuracy=atof(optarg);
@@ -505,7 +502,7 @@ void help() {
     case 'F': flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
-              ztraverse = zFloor+5.;
+              ztraverse = zFloor+5.; //dynamicize machine dimensions in z.
               fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
@@ -537,10 +534,12 @@ void help() {
 #ifdef _WIN32
 seedrand((float)time(0));
 #endif
- if(append)
-   gcode = fopen(argv[optind+1],"a");
- else
+
+ if(append){ 
+  gcode = fopen(argv[optind+1],"a");
+ } else {
   gcode=fopen(argv[optind+1],"w");
+ }
  if(gcode == NULL) {
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
@@ -602,26 +601,17 @@ seedrand((float)time(0));
       maxy = y;
     if(y < miny)
       miny = y;
-    // if(tsp) { //not tsp
-    //   if(tspFirst) {
-    //   fprintf(gcode,"G1 X%.4f Y%.4f F4800 \n",x,y);
-    //   fprintf(gcode,"G4 P0\n");
-    //   tspFirst = 0;
-    //   fprintf(gcode,CUTTERON,pwr);
-    //   }
-    //   else {
-    //     fprintf(gcode,"G1 X%.1f Y%.1f  F%d\n",x,y,feed);
-    //     fprintf(gcode,"G4 P0\n");
-    //   }
-    //   continue;
-    // } //not tsp
-    if(!cncMode)
+
+    if(!cncMode) {
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+      //printf("Not cnc mode reached\n");
+    }
 #ifndef G32
-    else
+    else {
       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
       fprintf(gcode,"G4 P0\n");
+    }
 #endif    
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d )\n",paths[k].city);
@@ -629,14 +619,14 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
-#ifndef G32    
-    if(!cncMode)
+#ifndef G32 
+    if(!cncMode) {
       fprintf(gcode,CUTTERON,pwr);
       fprintf(gcode,"G4 P0\n");
+    }
 #endif
     printed=0;
-    if(tsp)
-      continue;
+    if(tsp) {continue;}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
@@ -681,9 +671,6 @@ seedrand((float)time(0));
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
               }
-              // fprintf(gcode, "Writing to *gcode line k=%d\n",k);
-              // fflush(gcode);
-              // fsync(fileno(gcode));
         #ifndef	  G32    
                 fprintf(gcode,"G4 P0\n");
         #endif	      
@@ -704,9 +691,7 @@ seedrand((float)time(0));
             if(y < miny)
               miny = y;
 
-        //	  if(paths[j].points[0]==paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) {
             if(1) {
-              //d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
               if(1) {
                 printed = 1;
                 fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
@@ -764,16 +749,12 @@ seedrand((float)time(0));
       if(!printed) {
 #ifndef G32	
 	if(dwell != -1) {
-	  //fprintf(gcode,"( lowpwr )\n");
 	  fprintf(gcode,"M3 S10\n");
 	  sprintf(gbuff,"G4 P%d\n",dwell);
 	  fprintf(gcode,"%s",gbuff);
 	}
 	fprintf(gcode,"M5\n");
-#else
-	//fprintf(gcode,"( new dwell? )\n");
 #endif	
-	//fprintf(gcode,"G05 P%d\n",pwr);
       }
 #ifndef G32      
       fprintf(gcode,CUTTEROFF);
@@ -782,18 +763,15 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
       fprintf(gcode,"G4 P0\n");
       printed = 0;
-      //fprintf(stderr, "Printed =0\n");
     } 
   }
 #ifndef G32  
-  if(tsp)
-    fprintf(gcode,CUTTEROFF);
+  if(tsp) {fprintf(gcode,CUTTEROFF);}
 #else
   fprintf(gcode,"M5\n");
 #endif  
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
-  //fprintf(gcode,"( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
   free(cities); 
