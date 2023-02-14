@@ -48,7 +48,7 @@
 #define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
 #define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
                                   //separated with newline \n
-#define G32 0
+#define G32
 #ifdef G32
 #define CUTTERON "G0 M3 S%d\n"
 #else
@@ -226,7 +226,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 	      }
         if(doBez) {
           bezCount++;
-          printf("DoBez in calcPaths. Bez#%d\n", bezCount);
+          //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
           for(b=0;b<8;b++){
             paths[k].points[b]=pp[b];
           }
@@ -303,7 +303,6 @@ static void calcBounds(struct NSVGimage* image)
     }
     shapeCount++;
   }
-  printf("In calcBounds:\n");
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
 }
@@ -328,37 +327,41 @@ static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
     p4 = pts[cities[indexB+1]];
     dx = p1.x-p2.x;
     dy = p1.y-p2.y;
-    if(xy)
+    if(xy) {
       dist = dx*dx+dy*dy;
-    else
+    } else {
       dist = dy*dy;
+    }
     dx = p3.x-p4.x;
     dy = p3.y-p4.y;
-    if(xy)
+    if(xy) {
       dist += (dx*dx+dy*dy);
-    else
+    } else {
       dist += dy*dy;
+    }
     dx = p1.x-p3.x;
     dy = p1.y-p3.y;
-    if(xy)
+    if(xy){
       dist2 = dx*dx+dy*dy;
-    else
+    } else {
       dist2 = dy*dy;
+    }      
     dx = p2.x-p4.x;
     dy = p2.y-p4.y;
-    if(xy)
+    if(xy) {
       dist2 += (dx*dx+dy*dy);
-    else
+    } else {
       dist2 += dy*dy;
+    }
     if(dist2 < dist) {
       indexH = indexB;
       indexL = indexA+1;
       while(indexH > indexL) {
-	temp1 = cities[indexL];
-	cities[indexL]=cities[indexH];
-	cities[indexH] = temp1;
-	indexH--;
-	indexL++;
+        temp1 = cities[indexL];
+        cities[indexL]=cities[indexH];
+        cities[indexH] = temp1;
+        indexH--;
+        indexL++;
       }
     }
   }
@@ -368,8 +371,7 @@ void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
   printf("\t-Y shift Y-ax\n");
-  printf("\t-X sfit X-ax\n");
-  printf("\t-c use z-axis instead of laser\n");
+  printf("\t-X shift X-ax\n");
   printf("\t-f feed rate (3500)\n");
   printf("\t-n # number of reorders (30)\n");
   printf("\t-s scale (1.0)\n");
@@ -392,7 +394,6 @@ void help() {
   ToolPath* paths;
   int *cities,npaths;
   int feed = 3500;
-  //int shiftY = 30;
   int fullspeed=4800;
   int cityStart=1;
   float zFloor = -1.;
@@ -402,15 +403,12 @@ void help() {
   char xy = 1;
   float w,widthInmm = -1.;
   int numReord = 30; //
-  float scale = 0.15; //make this dynamic
+  float scale = 0.05; //make this dynamic
   float tol = 0.1; //smaller is better
-  float size = 100;
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
   int flip = 1; //may want to pull out.
-  int skip = 0;
-  //int units = 0;
   int printed=0;
   int cncMode = 0;
   int tsp = 0;
@@ -423,7 +421,7 @@ void help() {
   int waitTime = 25;
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
-  float shiftY = 0.;
+  float shiftY = 15.;
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
@@ -431,7 +429,6 @@ void help() {
   int ch;
   int dwell = -1;
   char gbuff[128];
-  int center = 0;
   printf("v0.0001 8.11.2020\n");
   //seed48(NULL);
   if(argc < 3) {
@@ -440,8 +437,6 @@ void help() {
   }
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
-    case 'C': center = 1;
-      break;
     case 'P': pwr = atoi(optarg);
       break;
     case 'D': waitTime=atoi(optarg);
@@ -452,8 +447,6 @@ void help() {
     case 'V': xy = 0;
       break;
 	xy = 1;
-      break;
-    case 'c': cncMode = 1;
       break;
     case 'Y': shiftY = atof(optarg); // shift
       break;
@@ -536,7 +529,7 @@ seedrand((float)time(0));
   if(first) {
     fprintf(gcode,GHEADER);
   }
-  if(cncMode) {fprintf(gcode,GMODE);}; //cnc-mode can use z-axis. AIDAN: Want to pull out cncMode for our purposes.
+  //if(cncMode) {fprintf(gcode,GMODE);}; //cnc-mode can use z-axis. AIDAN: Want to pull out cncMode for our purposes.
 #ifdef G32
   fprintf(gcode,CUTTERON,pwr);
 #endif  
@@ -576,7 +569,7 @@ seedrand((float)time(0));
     if(y < miny)
       miny = y;
 
-    if(!cncMode) {
+    if(!cncMode) { //we are not in cnc mode so only should worry about in this if
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
       //printf("Not cnc mode reached\n");
@@ -605,7 +598,6 @@ seedrand((float)time(0));
       xold = x;
       yold = y;
       //printf("bezC %d\n",bezCount);
-      skip = 0;
       first = 1;
       if(paths[j].city == cities[i]) {
         if(doBez) { //we always do bez
