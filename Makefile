@@ -1,11 +1,19 @@
 CC = clang
-CFLAGS = -Ofast
+GCC = xtensa-esp32s3-elf-gcc
+CFLAGS = -Ofast -v
 
-all: svg2gcode
+tool: svg2gcode
 
-svg2gcode:	svg2gcode.c nanosvg.h
+lib: libsvg2gcode.a
+
+svg2gcode: svg2gcode.c nanosvg.h
 	$(CC) -o svg2gcode -g svg2gcode.c -lm
+
+libsvg2gcode.a: svg2gcode.o
+	xtensa-esp32s3-elf-ar rcs libsvg2gcode.a svg2gcode.o
+
+svg2gcode.o: svg2gcode.c nanosvg.h
+	$(GCC) $(CFLAGS) -c svg2gcode.c
 
 clean:
 	rm -fr svg2code *.o
-
