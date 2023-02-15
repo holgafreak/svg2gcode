@@ -192,7 +192,7 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-// get all paths and paths to cities
+// get all paths and paths into cities
 static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -272,6 +272,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 #endif
 }
 
+//calculate the svg space bounds for the image and create initial city sized list of colors.
 static void calcBounds(struct NSVGimage* image)
 {
   struct NSVGshape* shape;
@@ -284,9 +285,9 @@ static void calcBounds(struct NSVGimage* image)
   pathCount = 0;
   pointsCount = 0;
   shapeCount = 0;
-  for (shape = image->shapes; shape != NULL; shape = shape->next) {
-    for (path = shape->paths; path != NULL; path = path->next) {
-      for (i = 0; i < path->npts-1; i++) {
+  for (shape = image->shapes; shape != NULL; shape = shape->next) { //for all shapes in an image. Color is at this level
+    for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
+      for (i = 0; i < path->npts-1; i++) { //for all points in a path.
         float* p = &path->pts[i*2];
         bounds[0] = minf(bounds[0], p[0]);
         bounds[1] = minf(bounds[1], p[1]);
@@ -294,13 +295,15 @@ static void calcBounds(struct NSVGimage* image)
         bounds[3] = maxf(bounds[3], p[1]);
 	      pointsCount++;
       }
-      pathCount++;
+      pathCount++; //paths seem to correlate to city. track list of colors, sort with cities in reorder.
+      // need to modify reorder to sort by colors, then proximity.
     }
     shapeCount++;
   }
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
 }
+
 //reorder  the paths to minimize cutter movement
 static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
@@ -387,7 +390,6 @@ void help() {
   printf("G32 Undefined\n");
 #endif
   int i,j,k,l,first = 1;
-  //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
@@ -509,8 +511,8 @@ void help() {
     scale = widthInmm/w;
   }
 
-  materialDimensions[0] = 279.4; //printer paper width
-  materialDimensions[1] = 215.9; //printer paper height
+  materialDimensions[0] = 150; //available drawing width
+  materialDimensions[1] = 100; //available drawing height
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
   float drawSpaceHeight = materialDimensions[1]-(2*margin);
   float drawingWidth = w; //size of drawing scaled
@@ -542,7 +544,7 @@ void help() {
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
     shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
-    shiftY = -1*((margin + drawSpaceHeight/2) + (drawingHeight/2));
+    shiftY = -((margin + drawSpaceHeight/2) + (drawingHeight/2));
   }
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
