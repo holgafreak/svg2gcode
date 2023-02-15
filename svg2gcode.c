@@ -48,7 +48,7 @@
 #define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
 #define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
                                   //separated with newline \n
-#define G32 0
+#define G32
 #ifdef G32
 #define CUTTERON "G0 M3 S%d\n"
 #else
@@ -65,7 +65,6 @@ static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static int doBez = 1;
-static int simplify = 0;
 static struct NSVGimage* g_image = NULL;
 
 typedef struct {
@@ -193,77 +192,53 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-// get all paths and add a city for each path		  
+// get all paths and paths to cities
 static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths) {
-struct NSVGshape* shape;
+  struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
-  int i,j,k,l,p,b;
+  int i,j,k,l,p,b,bezCount;
   SVGPoint* pts;
 #ifdef DO_HPGL 
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
 #endif
+  bezCount=0;
   i=0;
   k=0;
   j=0;
   p=0;
   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
      for(path = shape->paths; path != NULL; path=path->next) {
-       if(path->closed && simplify) {
-	 pts = (SVGPoint*)malloc(path->npts*sizeof(SVGPoint));
+      for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
+        float *pp = &path->pts[j*2];
+        if(j==0) {
 	
-	 for(l=0;l<path->npts-1;l++) {
-	   float *pp=&path->pts[l*2];
-	   if(l==0) {
-	     points[i].x = pp[0];
-	     points[i].y = pp[1];
-	   }
-	   pts[l].x = pp[0];
-	   pts[l].y = pp[1];
-	 }
-	 qsort((void*)pts,path->npts-1,sizeof(SVGPoint),pcomp);
-	 paths[k].points[0] = pts[path->npts-2].x;
-	 paths[k].points[1] = pts[path->npts-2].y;
-	 paths[k].points[2] = pts[0].x;
-	 paths[k].points[3] = pts[0].y;
-	 paths[k].closed = path->closed;
-	 paths[k].city = i; 
-	 k++;
-	 //fprintf(stderr,"i %d pts %f %f %f %f\n",i,pts[path->npts-2].x,pts[path->npts-2].y,pts[0].x,pts[0].y);
-	 free(pts);
-	 
-	 goto cont;
-       }
-
-       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
-	 float *pp = &path->pts[j*2];
-	 if(j==0) {
-	
-	   points[i].x = pp[0];
-	   points[i].y = pp[1];
+        points[i].x = pp[0];
+        points[i].y = pp[1];
 #ifdef DO_HPGL
-	   fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
-	   fflush(f);
-	 
-	 } else {
-	   fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
-	   fflush(f);
+        fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
+        fflush(f);
+	      } else {
+        fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
+        fflush(f);
 #endif
-	 }
-	 if(doBez) {
-	   for(b=0;b<8;b++)
-	     paths[k].points[b]=pp[b];
-	 } else {
-	   paths[k].points[0] = pp[0];
-	   paths[k].points[1] = pp[1];
-	   paths[k].points[2] = pp[0];
-	   paths[k].points[3] = pp[1];
-	 }
-	 paths[k].closed = path->closed;
-	 paths[k].city = i; 
-	 k++;
-
+	      }
+        if(doBez) {
+          bezCount++;
+          //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
+          for(b=0;b<8;b++){
+            paths[k].points[b]=pp[b];
+          }
+        } else {
+          paths[k].points[0] = pp[0];
+          paths[k].points[1] = pp[1];
+          paths[k].points[2] = pp[0];
+          paths[k].points[3] = pp[1];
+        }
+        paths[k].closed = path->closed;
+        paths[k].city = i; 
+        k++;
        }
      cont:       
        if(k>pointsCount) {
@@ -283,15 +258,10 @@ struct NSVGshape* shape;
 	 fclose(f);
 #endif
 	 exit(-1);
-	 /*
-	  *npaths=k;
-	  return;
-	 */
        }
        cities[i] = i;
        i++;
      }
-  
      j++;
   }
   printf("total paths %d, total points %d\n",i,k);
@@ -328,7 +298,6 @@ static void calcBounds(struct NSVGimage* image)
     }
     shapeCount++;
   }
-  printf("In calcBounds:\n");
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
 }
@@ -353,37 +322,41 @@ static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
     p4 = pts[cities[indexB+1]];
     dx = p1.x-p2.x;
     dy = p1.y-p2.y;
-    if(xy)
+    if(xy) {
       dist = dx*dx+dy*dy;
-    else
+    } else {
       dist = dy*dy;
+    }
     dx = p3.x-p4.x;
     dy = p3.y-p4.y;
-    if(xy)
+    if(xy) {
       dist += (dx*dx+dy*dy);
-    else
+    } else {
       dist += dy*dy;
+    }
     dx = p1.x-p3.x;
     dy = p1.y-p3.y;
-    if(xy)
+    if(xy){
       dist2 = dx*dx+dy*dy;
-    else
+    } else {
       dist2 = dy*dy;
+    }      
     dx = p2.x-p4.x;
     dy = p2.y-p4.y;
-    if(xy)
+    if(xy) {
       dist2 += (dx*dx+dy*dy);
-    else
+    } else {
       dist2 += dy*dy;
+    }
     if(dist2 < dist) {
       indexH = indexB;
       indexL = indexA+1;
       while(indexH > indexL) {
-	temp1 = cities[indexL];
-	cities[indexL]=cities[indexH];
-	cities[indexH] = temp1;
-	indexH--;
-	indexL++;
+        temp1 = cities[indexL];
+        cities[indexL]=cities[indexH];
+        cities[indexH] = temp1;
+        indexH--;
+        indexL++;
       }
     }
   }
@@ -393,11 +366,12 @@ void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
   printf("\t-Y shift Y-ax\n");
-  printf("\t-X sfit X-ax\n");
-  printf("\t-c use z-axis instead of laser\n");
+  printf("\t-X shift X-ax\n");
   printf("\t-f feed rate (3500)\n");
   printf("\t-n # number of reorders (30)\n");
   printf("\t-s scale (1.0)\n");
+  printf("\t-S 1 scale to material size\n");
+  printf("\t-C center on drawing space\n");
   printf("\t-F flip Y-axis\n");
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
@@ -409,6 +383,9 @@ void help() {
   printf("\t-h this help\n");}
   
   int main(int argc, char* argv[]) {
+#ifndef G32
+  printf("G32 Undefined\n");
+#endif
   int i,j,k,l,first = 1;
   //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
@@ -417,27 +394,27 @@ void help() {
   ToolPath* paths;
   int *cities,npaths;
   int feed = 3500;
-  //int shiftY = 30;
   int fullspeed=4800;
   int cityStart=1;
   float zFloor = -1.;
   float ztraverse = -1.;
   float zengage = -1.;
   float width = -1;
+  float height =-1;
   char xy = 1;
-  float w,widthInmm = -1.;
-  int numReord = 30;
-  float scale = 0.15; //make this dynamic
+  float w,h,widthInmm,heightInmm = -1.;
+  int numReord = 30; //
+  float scale = 0.05; //make this dynamic. //this changes with widthInmm
+  float margin = 10; //margin around drawn elements in mm
+  float materialDimensions[2];
+  int fitToMaterial = 0;
+  int centerOnMaterial =1;
   float tol = 0.1; //smaller is better
-  float size = 100;
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
-  int flip = 1;
-  int skip = 0;
-  int units = 0;
+  int flip = 1; //may want to pull out.
   int printed=0;
-  int cncMode = 0;
   int tsp = 0;
   int tspFirst = 1;
   int autoshift = 0;
@@ -448,7 +425,7 @@ void help() {
   int waitTime = 25;
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
-  float shiftY = 0.;
+  float shiftY = 0;
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
@@ -456,18 +433,14 @@ void help() {
   int ch;
   int dwell = -1;
   char gbuff[128];
-  int center = 0;
   printf("v0.0001 8.11.2020\n");
   //seed48(NULL);
   if(argc < 3) {
     help();
     return -1;
   }
-  simplify = 0;
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
-    case 'C': center = 1;
-      break;
     case 'P': pwr = atoi(optarg);
       break;
     case 'D': waitTime=atoi(optarg);
@@ -479,15 +452,10 @@ void help() {
       break;
 	xy = 1;
       break;
-    case 'c': cncMode = 1;
-      break;
-     
     case 'Y': shiftY = atof(optarg); // shift
       break;
-      
     case 'X': shiftX = atof(optarg); // shift
       break;
-      
     case 'A':autoshift = 1;
       break;
     case 'm': accuracy=atof(optarg);
@@ -502,10 +470,13 @@ void help() {
       break;
     case 't': tol = atof(optarg);
       break;
-    case 'F': flip = 1;
+    case 'S': fitToMaterial = atof(optarg);
+      break;
+    case 'F': 
+      flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
-              ztraverse = zFloor+5.;
+              ztraverse = zFloor+5.; //dynamicize machine dimensions in z.
               fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
@@ -526,21 +497,68 @@ void help() {
   calcBounds(g_image);
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
-  fprintf(stderr,"width %f\n",width);
+  height = g_image->height;
+  printf("Image width x height: %f x %f\n", width, height);
+
+  //bounding box dimensions of drawn svg elements.
   w = fabs(bounds[0]-bounds[2]);
-  if(widthInmm != -1.0) 
+  h = fabs(bounds[1]-bounds[3]);
+
+  //scaling + fitting operations. For starters fit to standard 8.5 x 11" printer paper in landscape. 1" margin.
+  if(widthInmm != -1.0){
     scale = widthInmm/w;
+  }
+
+  materialDimensions[0] = 279.4; //printer paper width
+  materialDimensions[1] = 215.9; //printer paper height
+  float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
+  float drawSpaceHeight = materialDimensions[1]-(2*margin);
+  float drawingWidth = w; //size of drawing scaled
+  float drawingHeight = h;
+
+  //Scale to material with default margin of 1"
+  if(fitToMaterial == 1){
+    printf("Fitting to material size\n");
+
+    //need to identify the bounding dimension.
+    float materialRatio = drawSpaceWidth/drawSpaceHeight;
+    float svgRatio = w/h;
+    //if materialRatio > svgRatio, Y is the bounding dimension. if material ratio is less than svgRatio, X is the bounding dimension.
+    if(materialRatio > svgRatio){ //if y is bounding
+      printf("Scaling to drawSpaceHeight = %f \n",drawSpaceHeight);
+      scale = drawSpaceHeight/h;
+      drawingWidth = w*scale;
+      drawingHeight = h*scale;
+    } else if (svgRatio >= materialRatio){ //if x is bounding or equal
+      printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
+      scale = drawSpaceWidth/w;
+      drawingHeight = h*scale;
+      drawingWidth = w*scale;
+    }
+    shiftX = margin;
+    shiftY = -(margin + drawingHeight);
+  }
+  if(centerOnMaterial == 1){
+    printf("Centering on drawing space\n");
+    float centerX = drawingWidth/2;
+    shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
+    shiftY = -1*((margin + drawSpaceHeight/2) + (drawingHeight/2));
+  }
+
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
+  fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
   zeroX = -bounds[0];
   zeroY = -bounds[1];
-
+  
 #ifdef _WIN32
 seedrand((float)time(0));
 #endif
- if(append)
-   gcode = fopen(argv[optind+1],"a");
- else
+
+ if(append){ 
+  gcode = fopen(argv[optind+1],"a");
+ } else {
   gcode=fopen(argv[optind+1],"w");
+ }
  if(gcode == NULL) {
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
@@ -563,11 +581,10 @@ seedrand((float)time(0));
   if(first) {
     fprintf(gcode,GHEADER);
   }
-  if(cncMode) {fprintf(gcode,GMODE);}; //cnc-mode can use z-axis. AIDAN: Want to pull out cncMode for our purposes.
 #ifdef G32
   fprintf(gcode,CUTTERON,pwr);
 #endif  
-  //Being looping through shapes and stuff
+  //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
   for(i=0;i<pathCount;i++) {
@@ -602,26 +619,15 @@ seedrand((float)time(0));
       maxy = y;
     if(y < miny)
       miny = y;
-    // if(tsp) { //not tsp
-    //   if(tspFirst) {
-    //   fprintf(gcode,"G1 X%.4f Y%.4f F4800 \n",x,y);
-    //   fprintf(gcode,"G4 P0\n");
-    //   tspFirst = 0;
-    //   fprintf(gcode,CUTTERON,pwr);
-    //   }
-    //   else {
-    //     fprintf(gcode,"G1 X%.1f Y%.1f  F%d\n",x,y,feed);
-    //     fprintf(gcode,"G4 P0\n");
-    //   }
-    //   continue;
-    // } //not tsp
-    if(!cncMode)
-      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-      fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+
+    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+
 #ifndef G32
-    else
+    else {
       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
       fprintf(gcode,"G4 P0\n");
+    }
 #endif    
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d )\n",paths[k].city);
@@ -629,19 +635,16 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
-#ifndef G32    
-    if(!cncMode)
-      fprintf(gcode,CUTTERON,pwr);
-      fprintf(gcode,"G4 P0\n");
+#ifndef G32 
+    fprintf(gcode,CUTTERON,pwr);
+    fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
-    if(tsp)
-      continue;
+    if(tsp) {continue;}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
       //printf("bezC %d\n",bezCount);
-      skip = 0;
       first = 1;
       if(paths[j].city == cities[i]) {
         if(doBez) { //we always do bez
@@ -681,9 +684,6 @@ seedrand((float)time(0));
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
               }
-              // fprintf(gcode, "Writing to *gcode line k=%d\n",k);
-              // fflush(gcode);
-              // fsync(fileno(gcode));
         #ifndef	  G32    
                 fprintf(gcode,"G4 P0\n");
         #endif	      
@@ -704,9 +704,7 @@ seedrand((float)time(0));
             if(y < miny)
               miny = y;
 
-        //	  if(paths[j].points[0]==paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) {
             if(1) {
-              //d = sqrt((x-xold)*(x-xold)+(y-yold)*(y-yold));
               if(1) {
                 printed = 1;
                 fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
@@ -751,7 +749,6 @@ seedrand((float)time(0));
     if(tsp)
       continue;
     if(paths[j].closed) {
-      //may need to add cityStart cond
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
@@ -760,20 +757,16 @@ seedrand((float)time(0));
 #endif      
       printed = 1;
     }
-    if(!cncMode) {
+    if(1) { //cnc mode replacement
       if(!printed) {
 #ifndef G32	
 	if(dwell != -1) {
-	  //fprintf(gcode,"( lowpwr )\n");
 	  fprintf(gcode,"M3 S10\n");
 	  sprintf(gbuff,"G4 P%d\n",dwell);
 	  fprintf(gcode,"%s",gbuff);
 	}
 	fprintf(gcode,"M5\n");
-#else
-	//fprintf(gcode,"( new dwell? )\n");
 #endif	
-	//fprintf(gcode,"G05 P%d\n",pwr);
       }
 #ifndef G32      
       fprintf(gcode,CUTTEROFF);
@@ -782,18 +775,15 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
       fprintf(gcode,"G4 P0\n");
       printed = 0;
-      //fprintf(stderr, "Printed =0\n");
     } 
   }
 #ifndef G32  
-  if(tsp)
-    fprintf(gcode,CUTTEROFF);
+  if(tsp) {fprintf(gcode,CUTTEROFF);}
 #else
   fprintf(gcode,"M5\n");
 #endif  
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
-  //fprintf(gcode,"( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
   free(cities); 
