@@ -258,15 +258,10 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 	 fclose(f);
 #endif
 	 exit(-1);
-	 /*
-	  *npaths=k;
-	  return;
-	 */
        }
        cities[i] = i;
        i++;
      }
-  
      j++;
   }
   printf("total paths %d, total points %d\n",i,k);
@@ -375,6 +370,8 @@ void help() {
   printf("\t-f feed rate (3500)\n");
   printf("\t-n # number of reorders (30)\n");
   printf("\t-s scale (1.0)\n");
+  printf("\t-S 1 scale to material size\n");
+  printf("\t-C center on drawing space\n");
   printf("\t-F flip Y-axis\n");
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
@@ -386,6 +383,9 @@ void help() {
   printf("\t-h this help\n");}
   
   int main(int argc, char* argv[]) {
+#ifndef G32
+  printf("G32 Undefined\n");
+#endif
   int i,j,k,l,first = 1;
   //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
@@ -400,17 +400,21 @@ void help() {
   float ztraverse = -1.;
   float zengage = -1.;
   float width = -1;
+  float height =-1;
   char xy = 1;
-  float w,widthInmm = -1.;
+  float w,h,widthInmm,heightInmm = -1.;
   int numReord = 30; //
-  float scale = 0.05; //make this dynamic
+  float scale = 0.05; //make this dynamic. //this changes with widthInmm
+  float margin = 10; //margin around drawn elements in mm
+  float materialDimensions[2];
+  int fitToMaterial = 0;
+  int centerOnMaterial =1;
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
   int flip = 1; //may want to pull out.
   int printed=0;
-  int cncMode = 0;
   int tsp = 0;
   int tspFirst = 1;
   int autoshift = 0;
@@ -421,7 +425,7 @@ void help() {
   int waitTime = 25;
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
-  float shiftY = 15.;
+  float shiftY = 0;
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
@@ -466,7 +470,10 @@ void help() {
       break;
     case 't': tol = atof(optarg);
       break;
-    case 'F': flip = 1;
+    case 'S': fitToMaterial = atof(optarg);
+      break;
+    case 'F': 
+      flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
               ztraverse = zFloor+5.; //dynamicize machine dimensions in z.
@@ -490,14 +497,59 @@ void help() {
   calcBounds(g_image);
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
-  fprintf(stderr,"width %f\n",width);
+  height = g_image->height;
+  printf("Image width x height: %f x %f\n", width, height);
+
+  //bounding box dimensions of drawn svg elements.
   w = fabs(bounds[0]-bounds[2]);
-  if(widthInmm != -1.0) 
+  h = fabs(bounds[1]-bounds[3]);
+
+  //scaling + fitting operations. For starters fit to standard 8.5 x 11" printer paper in landscape. 1" margin.
+  if(widthInmm != -1.0){
     scale = widthInmm/w;
+  }
+
+  materialDimensions[0] = 279.4; //printer paper width
+  materialDimensions[1] = 215.9; //printer paper height
+  float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
+  float drawSpaceHeight = materialDimensions[1]-(2*margin);
+  float drawingWidth = w; //size of drawing scaled
+  float drawingHeight = h;
+
+  //Scale to material with default margin of 1"
+  if(fitToMaterial == 1){
+    printf("Fitting to material size\n");
+
+    //need to identify the bounding dimension.
+    float materialRatio = drawSpaceWidth/drawSpaceHeight;
+    float svgRatio = w/h;
+    //if materialRatio > svgRatio, Y is the bounding dimension. if material ratio is less than svgRatio, X is the bounding dimension.
+    if(materialRatio > svgRatio){ //if y is bounding
+      printf("Scaling to drawSpaceHeight = %f \n",drawSpaceHeight);
+      scale = drawSpaceHeight/h;
+      drawingWidth = w*scale;
+      drawingHeight = h*scale;
+    } else if (svgRatio >= materialRatio){ //if x is bounding or equal
+      printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
+      scale = drawSpaceWidth/w;
+      drawingHeight = h*scale;
+      drawingWidth = w*scale;
+    }
+    shiftX = margin;
+    shiftY = -(margin + drawingHeight);
+  }
+  if(centerOnMaterial == 1){
+    printf("Centering on drawing space\n");
+    float centerX = drawingWidth/2;
+    shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
+    shiftY = -1*((margin + drawSpaceHeight/2) + (drawingHeight/2));
+  }
+
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
+  fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
   zeroX = -bounds[0];
   zeroY = -bounds[1];
-
+  
 #ifdef _WIN32
 seedrand((float)time(0));
 #endif
@@ -529,11 +581,10 @@ seedrand((float)time(0));
   if(first) {
     fprintf(gcode,GHEADER);
   }
-  //if(cncMode) {fprintf(gcode,GMODE);}; //cnc-mode can use z-axis. AIDAN: Want to pull out cncMode for our purposes.
 #ifdef G32
   fprintf(gcode,CUTTERON,pwr);
 #endif  
-  //Being looping through shapes and stuff
+  //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
   for(i=0;i<pathCount;i++) {
@@ -569,11 +620,9 @@ seedrand((float)time(0));
     if(y < miny)
       miny = y;
 
-    if(!cncMode) { //we are not in cnc mode so only should worry about in this if
-      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-      fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-      //printf("Not cnc mode reached\n");
-    }
+    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+
 #ifndef G32
     else {
       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
@@ -587,10 +636,8 @@ seedrand((float)time(0));
           cityStart = 0;
     }
 #ifndef G32 
-    if(!cncMode) {
-      fprintf(gcode,CUTTERON,pwr);
-      fprintf(gcode,"G4 P0\n");
-    }
+    fprintf(gcode,CUTTERON,pwr);
+    fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
     if(tsp) {continue;}
@@ -702,7 +749,6 @@ seedrand((float)time(0));
     if(tsp)
       continue;
     if(paths[j].closed) {
-      //may need to add cityStart cond
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
@@ -711,7 +757,7 @@ seedrand((float)time(0));
 #endif      
       printed = 1;
     }
-    if(!cncMode) {
+    if(1) { //cnc mode replacement
       if(!printed) {
 #ifndef G32	
 	if(dwell != -1) {
