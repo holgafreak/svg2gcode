@@ -582,8 +582,6 @@ seedrand((float)time(0));
   points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
   paths = (ToolPath*)malloc(pointsCount*2*sizeof(ToolPath));
   newCities = (City*)malloc(pathCount*2*sizeof(City));
-
-
   printf("Size of City: %lu, size of newCities: %lu\n", sizeof(City), sizeof(City)*pathCount*2);
   
   npaths = 0;
