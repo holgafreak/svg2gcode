@@ -45,8 +45,8 @@
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
-#define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
-#define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
+#define GHEADER "G90\n" //G92 X0 Y0\n //add here your specific G-codes
+#define GHEADER_NEW "nG90\n" //G92 X0 Y0\n //add here your specific G-codes
                                   //separated with newline \n
 #define G32
 #ifdef G32
@@ -405,8 +405,8 @@ void help() {
   ToolPath* paths;
   City *cities;
   int npaths;
-  int feed = 3500;
-  int fullspeed=4800;
+  int feed = 15000;
+  int fullspeed=22000;
   int cityStart=1;
   float zFloor = -1.;
   float ztraverse = -1.;
@@ -417,7 +417,8 @@ void help() {
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 30;
   float scale = 0.05; //make this dynamic. //this changes with widthInmm
-  float margin = 10; //margin around drawn elements in mm
+  float margin = 50.8; //xmargin around drawn elements in mm
+  float ymargin = 25.4; //ymargin around drawn elements in mm
   float materialDimensions[2];
   int fitToMaterial = 0;
   int centerOnMaterial =1;
@@ -488,7 +489,7 @@ void help() {
       flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
-              ztraverse = zFloor+5.; //dynamicize machine dimensions in z.
+              ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
               fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
@@ -521,10 +522,10 @@ void help() {
     scale = widthInmm/w;
   }
 
-  materialDimensions[0] = 150; //available drawing width (X travel)
-  materialDimensions[1] = 100; //available drawing height (Y travel)
+  materialDimensions[0] = 279.4; //available drawing width (X travel)
+  materialDimensions[1] = 215.9; //available drawing height (Y travel)
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
-  float drawSpaceHeight = materialDimensions[1]-(2*margin);
+  float drawSpaceHeight = materialDimensions[1]-(2*ymargin);
   float drawingWidth = w; //size of drawing scaled
   float drawingHeight = h;
 
@@ -548,13 +549,13 @@ void help() {
       drawingWidth = w*scale;
     }
     shiftX = margin;
-    shiftY = -(margin + drawingHeight);
+    shiftY = -(ymargin + drawingHeight);
   }
   if(centerOnMaterial == 1){
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
     shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
-    shiftY = -((margin + drawSpaceHeight/2) + (drawingHeight/2));
+    shiftY = -((ymargin + drawSpaceHeight/2) + (drawingHeight/2));
   }
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
