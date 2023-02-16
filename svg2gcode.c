@@ -313,8 +313,10 @@ static void calcBounds(struct NSVGimage* image)
 static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCities) {
   printf("ncity = %d\n", ncity);
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
+  City temp;
   float dx,dy,dist,dist2;
   SVGPoint p1,p2,p3,p4;
+  SVGPoint pn1,pn2,pn3,pn4;
   for(i=0;i<800*ncity;i++) {
     indexA = (int)(RANDOM()*(ncity-2));
     indexB = (int)(RANDOM()*(ncity-2));
@@ -330,6 +332,11 @@ static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCit
     p2 = pts[cities[indexA+1]];
     p3 = pts[cities[indexB]];
     p4 = pts[cities[indexB+1]];
+    //test integration of city struct
+    pn1 = pts[newCities[indexA].id];
+    pn2 = pts[newCities[indexA+1].id];
+    pn3 = pts[newCities[indexB].id];
+    pn4 = pts[newCities[indexB+1].id];
     dx = p1.x-p2.x;
     dy = p1.y-p2.y;
     if(xy) {
@@ -361,10 +368,13 @@ static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCit
     if(dist2 < dist) {
       indexH = indexB;
       indexL = indexA+1;
-      while(indexH > indexL) {
+      while(indexH > indexL) { //test newCities swap.
         temp1 = cities[indexL];
+        temp = newCities[indexL];
         cities[indexL]=cities[indexH];
         cities[indexH] = temp1;
+        newCities[indexL]=newCities[indexH];
+        newCities[indexH] = temp;
         indexH--;
         indexL++;
       }
@@ -590,7 +600,7 @@ seedrand((float)time(0));
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points,cities,pathCount,xy, newCities);
+    reorder(points, cities, pathCount, xy, newCities);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -606,24 +616,19 @@ seedrand((float)time(0));
   i=0;
   for(i=0;i<pathCount;i++) {
     cityStart=1;
-    //fprintf(gcode,"New city? City start = %d\n",cityStart);
     for(k=0;k<npaths;k++) {
-      //fprintf(stderr, "npaths = %d\n",npaths);
       if(paths[k].city == -1){
-        //fprintf(stderr,"Paths[k],city == -1\n");
 	      continue;
       }
-      if(paths[k].city == cities[i]) {
-        //fprintf(stderr,"New city at i=%d k=%d?\n",i,k);
+      if(paths[k].city == newCities[i].id) {
         break;
       }
     }
     if(k >= npaths-1) {
-      //printf("k > \n");
       continue;
     }
     firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
-    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY; // changed
+    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
     if(flip) {
       firsty = -firsty;
       y = -y;
@@ -647,7 +652,7 @@ seedrand((float)time(0));
     }
 #endif    
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d )\n",paths[k].city);
+    fprintf(gcode,"( city %d, color %d)\n",paths[k].city, newCities[paths[k].city].strokeColor.color);
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
@@ -663,7 +668,7 @@ seedrand((float)time(0));
       yold = y;
       //printf("bezC %d\n",bezCount);
       first = 1;
-      if(paths[j].city == cities[i]) {
+      if(paths[j].city == newCities[i].id) {
         if(doBez) { //we always do bez
             bezCount = 0;
             if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
