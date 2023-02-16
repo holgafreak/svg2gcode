@@ -80,7 +80,7 @@ typedef struct {
 
 typedef struct {
   int id;
-  NSVGpaint strokeColor;
+  NSVGpaint stroke;
 } City;
 
 static SVGPoint bezPoints[64];
@@ -196,7 +196,8 @@ static int pcomp(const void* a, const void* b) {
 }
 
 // get all paths and paths into cities
-static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths, City *newCities) {
+//static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths, City *newCities) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *newCities) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
@@ -262,9 +263,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 	 exit(-1);
        }
        newCities[i].id = i;
-       newCities[i].strokeColor = shape->stroke;
+       newCities[i].stroke = shape->stroke;
        printf("City number %d color = %d\n", i, (shape->stroke.color));
-       cities[i] = i;
+       //cities[i] = i;
        i++;
      }
      j++;
@@ -310,11 +311,12 @@ static void calcBounds(struct NSVGimage* image)
 }
 
 //reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCities) {
+//static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCities) {
+static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
   printf("ncity = %d\n", ncity);
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   City temp;
-  float dx,dy,dist,dist2;
+  float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
   for(i=0;i<800*ncity;i++) {
@@ -328,51 +330,68 @@ static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCit
       indexB = indexA;
       indexA = temp1;
     }
-    p1 = pts[cities[indexA]];
-    p2 = pts[cities[indexA+1]];
-    p3 = pts[cities[indexB]];
-    p4 = pts[cities[indexB+1]];
+    // p1 = pts[cities[indexA]];
+    // p2 = pts[cities[indexA+1]];
+    // p3 = pts[cities[indexB]];
+    // p4 = pts[cities[indexB+1]];
     //test integration of city struct
     pn1 = pts[newCities[indexA].id];
     pn2 = pts[newCities[indexA+1].id];
     pn3 = pts[newCities[indexB].id];
     pn4 = pts[newCities[indexB+1].id];
-    dx = p1.x-p2.x;
-    dy = p1.y-p2.y;
+    dnx = pn1.x-pn2.x;
+    dny = pn1.y-pn2.y;
+    // dx = p1.x-p2.x;
+    // dy = p1.y-p2.y;
     if(xy) {
-      dist = dx*dx+dy*dy;
+      ndist = dnx * dnx + dny * dny;
+      //dist = dx*dx+dy*dy;
     } else {
-      dist = dy*dy;
+      ndist = dny * dny;
+      //dist = dy*dy;
     }
-    dx = p3.x-p4.x;
-    dy = p3.y-p4.y;
+    // dx = p3.x-p4.x;
+    // dy = p3.y-p4.y;
+    dnx = pn3.x-pn4.x;
+    dny = pn3.y-pn4.y;
+
     if(xy) {
-      dist += (dx*dx+dy*dy);
+      ndist += (dnx * dnx + dny * dny);
+      //dist += (dx*dx+dy*dy);
     } else {
-      dist += dy*dy;
+      ndist += dny * dny;
+      //dist += dy*dy;
     }
-    dx = p1.x-p3.x;
-    dy = p1.y-p3.y;
+    // dx = p1.x-p3.x;
+    // dy = p1.y-p3.y;
+    dnx = pn1.x - pn3.x;
+    dny = pn1.y - pn3.y;
     if(xy){
-      dist2 = dx*dx+dy*dy;
+      ndist2 = dnx * dnx + dny * dny;
+      //dist2 = dx*dx+dy*dy;
     } else {
-      dist2 = dy*dy;
+      ndist2 = dny * dny;
+      //dist2 = dy*dy;
     }      
-    dx = p2.x-p4.x;
-    dy = p2.y-p4.y;
+    // dx = p2.x-p4.x;
+    // dy = p2.y-p4.y;
+    dnx = pn2.x - pn4.x;
+    dny = pn2.y - pn4.y;
     if(xy) {
-      dist2 += (dx*dx+dy*dy);
+      ndist2 += dnx * dnx + dny * dny;
+      //dist2 += (dx*dx+dy*dy);
     } else {
-      dist2 += dy*dy;
+      ndist2 += dny * dny;
+      //dist2 += dy*dy;
     }
-    if(dist2 < dist) {
+    if(ndist2 < ndist) {
       indexH = indexB;
       indexL = indexA+1;
       while(indexH > indexL) { //test newCities swap.
-        temp1 = cities[indexL];
+        //temp1 = cities[indexL];
         temp = newCities[indexL];
-        cities[indexL]=cities[indexH];
-        cities[indexH] = temp1;
+        //cities[indexL]=cities[indexH];
+        //cities[indexH] = temp1;
         newCities[indexL]=newCities[indexH];
         newCities[indexH] = temp;
         indexH--;
@@ -595,12 +614,13 @@ seedrand((float)time(0));
   printf("Size of City: %lu, size of newCities: %lu\n", sizeof(City), sizeof(City)*pathCount*2);
   
   npaths = 0;
-  calcPaths(points, paths, cities, &npaths, newCities);
+  calcPaths(points, paths, &npaths, newCities);
   //at this point we have newCities populated with id and color.
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points, cities, pathCount, xy, newCities);
+    // reorder(points, cities, pathCount, xy, newCities);
+    reorder(points, pathCount, xy, newCities);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -652,7 +672,7 @@ seedrand((float)time(0));
     }
 #endif    
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d, color %d)\n",paths[k].city, newCities[paths[k].city].strokeColor.color);
+    fprintf(gcode,"( city %d, color %d)\n",paths[k].city, newCities[paths[k].city].stroke.color);
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
