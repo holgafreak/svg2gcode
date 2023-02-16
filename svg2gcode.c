@@ -422,6 +422,8 @@ void help() {
   float materialDimensions[2];
   int fitToMaterial = 0;
   int centerOnMaterial =1;
+  int currColor =-1;
+  int nColors =-1;
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
