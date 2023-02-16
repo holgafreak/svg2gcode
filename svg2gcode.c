@@ -78,13 +78,15 @@ typedef struct {
   char closed;
 } ToolPath;
 
+typedef struct {
+  int id;
+  NSVGpaint strokeColor;
+} City;
+
 static SVGPoint bezPoints[64];
 static SVGPoint first,last;
 static int bezCount = 0;
 #ifdef _WIN32
-//typedef unsigned long int uint64_t;
-//typedef unsigned int  uint32_t;
-
 
 static uint64_t seed;
 
@@ -187,13 +189,14 @@ static void cubicBez(float x1, float y1, float x2, float y2,
 static int pcomp(const void* a, const void* b) {
   SVGPoint* ap = (SVGPoint*)a;
   SVGPoint* bp = (SVGPoint*)b;
-  if(sqrt(ap->x*ap->x + ap->y*ap->y) > sqrt(bp->x*bp->x+bp->y*bp->y))
+  if(sqrt(ap->x*ap->x + ap->y*ap->y) > sqrt(bp->x*bp->x+bp->y*bp->y)) {
     return 1;
+  }
   return -1;
 }
 
 // get all paths and paths into cities
-static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths) {
+static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths, City *newCities) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
@@ -213,7 +216,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
         if(j==0) {
-	
         points[i].x = pp[0];
         points[i].y = pp[1];
 #ifdef DO_HPGL
@@ -259,6 +261,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 #endif
 	 exit(-1);
        }
+       newCities[i].id = i;
+       newCities[i].strokeColor = shape->stroke;
+       printf("City number %d color = %d\n", i, (shape->stroke.color));
        cities[i] = i;
        i++;
      }
@@ -304,16 +309,18 @@ static void calcBounds(struct NSVGimage* image)
   printf("shapeCount = %d\n",shapeCount);
 }
 
-//reorder  the paths to minimize cutter movement
-static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
+//reorder the paths to minimize cutter movement. //default is xy = 1
+static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCities) {
+  printf("ncity = %d\n", ncity);
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   float dx,dy,dist,dist2;
   SVGPoint p1,p2,p3,p4;
   for(i=0;i<800*ncity;i++) {
     indexA = (int)(RANDOM()*(ncity-2));
     indexB = (int)(RANDOM()*(ncity-2));
-    if(abs(indexB-indexA) < 2)
+    if(abs(indexB-indexA) < 2){
       continue;
+    }
     if(indexB < indexA) {
       temp1 = indexB;
       indexB = indexA;
@@ -394,6 +401,7 @@ void help() {
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
   ToolPath* paths;
+  City *newCities;
   int *cities,npaths;
   int feed = 3500;
   int fullspeed=4800;
@@ -405,7 +413,7 @@ void help() {
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
-  int numReord = 30; //
+  int numReord = 30;
   float scale = 0.05; //make this dynamic. //this changes with widthInmm
   float margin = 10; //margin around drawn elements in mm
   float materialDimensions[2];
@@ -567,15 +575,22 @@ seedrand((float)time(0));
  }
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
+  //why are these all 2x neccesary size?
   points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
-  cities = (int*)malloc(pathCount*2*sizeof(int));
+  cities = (int*)malloc(pathCount*2*sizeof(int)); //new city struct that tracks stroke color?
   paths = (ToolPath*)malloc(pointsCount*2*sizeof(ToolPath));
+  newCities = (City*)malloc(pathCount*2*sizeof(City));
+
+
+  printf("Size of City: %lu, size of newCities: %lu\n", sizeof(City), sizeof(City)*pathCount*2);
   
   npaths = 0;
-  calcPaths(points,paths,cities,&npaths);
-  printf("reorder ");
+  calcPaths(points, paths, cities, &npaths, newCities);
+  //at this point we have newCities populated with id and color.
+
+  printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points,cities,pathCount,xy);
+    reorder(points,cities,pathCount,xy, newCities);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -790,6 +805,7 @@ seedrand((float)time(0));
   free(points);
   free(cities); 
   free(paths);
+  free(newCities);
   nsvgDelete(g_image);
   return 0;
 }
