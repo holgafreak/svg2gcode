@@ -196,7 +196,7 @@ static int pcomp(const void* a, const void* b) {
 }
 
 // get all paths and paths into cities
-static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *newCities) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
@@ -261,9 +261,9 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *newC
 #endif
 	 exit(-1);
        }
-       newCities[i].id = i;
-       newCities[i].stroke = shape->stroke;
-       printf("City number %d color = %d\n", i, (shape->stroke.color));
+       cities[i].id = i;
+       cities[i].stroke = shape->stroke;
+       //printf("City number %d color = %d\n", i, (shape->stroke.color));
        i++;
      }
      j++;
@@ -309,8 +309,7 @@ static void calcBounds(struct NSVGimage* image)
 }
 
 //reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
-  printf("ncity = %d\n", ncity);
+static void reorder(SVGPoint* pts, int ncity, char xy, City* cities) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   City temp;
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
@@ -328,10 +327,10 @@ static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
       indexA = temp1;
     }
     //test integration of city struct
-    pn1 = pts[newCities[indexA].id];
-    pn2 = pts[newCities[indexA+1].id];
-    pn3 = pts[newCities[indexB].id];
-    pn4 = pts[newCities[indexB+1].id];
+    pn1 = pts[cities[indexA].id];
+    pn2 = pts[cities[indexA+1].id];
+    pn3 = pts[cities[indexB].id];
+    pn4 = pts[cities[indexB+1].id];
     dnx = pn1.x-pn2.x;
     dny = pn1.y-pn2.y;
     if(xy) {
@@ -364,10 +363,10 @@ static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
     if(ndist2 < ndist) {
       indexH = indexB;
       indexL = indexA+1;
-      while(indexH > indexL) { //test newCities swap.
-        temp = newCities[indexL];
-        newCities[indexL]=newCities[indexH];
-        newCities[indexH] = temp;
+      while(indexH > indexL) { //test cities swap.
+        temp = cities[indexL];
+        cities[indexL]=cities[indexH];
+        cities[indexH] = temp;
         indexH--;
         indexL++;
       }
@@ -404,7 +403,7 @@ void help() {
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
   ToolPath* paths;
-  City *newCities;
+  City *cities;
   int npaths;
   int feed = 3500;
   int fullspeed=4800;
@@ -517,13 +516,13 @@ void help() {
   w = fabs(bounds[0]-bounds[2]);
   h = fabs(bounds[1]-bounds[3]);
 
-  //scaling + fitting operations. For starters fit to standard 8.5 x 11" printer paper in landscape. 1" margin.
+  //scaling + fitting operations.
   if(widthInmm != -1.0){
     scale = widthInmm/w;
   }
 
-  materialDimensions[0] = 150; //available drawing width
-  materialDimensions[1] = 100; //available drawing height
+  materialDimensions[0] = 150; //available drawing width (X travel)
+  materialDimensions[1] = 100; //available drawing height (Y travel)
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
   float drawSpaceHeight = materialDimensions[1]-(2*margin);
   float drawingWidth = w; //size of drawing scaled
@@ -578,19 +577,21 @@ seedrand((float)time(0));
  }
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
-  //why are these all 2x neccesary size?
-  points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
-  paths = (ToolPath*)malloc(pointsCount*2*sizeof(ToolPath));
-  newCities = (City*)malloc(pathCount*2*sizeof(City));
-  printf("Size of City: %lu, size of newCities: %lu\n", sizeof(City), sizeof(City)*pathCount*2);
+  points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
+  paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
+  cities = (City*)malloc(pathCount*sizeof(City));
+  printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   
   npaths = 0;
-  calcPaths(points, paths, &npaths, newCities);
-  //at this point we have newCities populated with id and color.
+  calcPaths(points, paths, &npaths, cities);
+  //at this point we have cities populated with id and color.
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points, pathCount, xy, newCities);
+    if(k%5 == 0){
+      printf("ncity = %d\n", pathCount);
+    }
+    reorder(points, pathCount, xy, cities);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -604,13 +605,18 @@ seedrand((float)time(0));
   //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
-  for(i=0;i<pathCount;i++) {
+  int skipCond = 0;
+  int writeCond = 0; 
+  for(i=0;i<pathCount;i++) { //equal to the number of cities.
     cityStart=1;
-    for(k=0;k<npaths;k++) {
+    for(k=0;k<npaths;k++) { //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
+                            //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(paths[k].city == -1){
+        skipCond++;
 	      continue;
       }
-      if(paths[k].city == newCities[i].id) {
+      if(paths[k].city == cities[i].id) {
+        writeCond++;
         break;
       }
     }
@@ -642,7 +648,8 @@ seedrand((float)time(0));
     }
 #endif    
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d, color %d)\n",paths[k].city, newCities[paths[k].city].stroke.color);
+    fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
+    //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
@@ -658,7 +665,7 @@ seedrand((float)time(0));
       yold = y;
       //printf("bezC %d\n",bezCount);
       first = 1;
-      if(paths[j].city == newCities[i].id) {
+      if(paths[j].city == cities[i].id) {
         if(doBez) { //we always do bez
             bezCount = 0;
             if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
@@ -799,7 +806,9 @@ seedrand((float)time(0));
   fclose(gcode);
   free(points);
   free(paths);
-  free(newCities);
+  free(cities);
   nsvgDelete(g_image);
+  printf("writeCond reached = %d\n", writeCond);
+  printf("skipCond reached = %d\n", skipCond);
   return 0;
 }
