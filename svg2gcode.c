@@ -196,7 +196,6 @@ static int pcomp(const void* a, const void* b) {
 }
 
 // get all paths and paths into cities
-//static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths, City *newCities) {
 static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *newCities) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -265,7 +264,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *newC
        newCities[i].id = i;
        newCities[i].stroke = shape->stroke;
        printf("City number %d color = %d\n", i, (shape->stroke.color));
-       //cities[i] = i;
        i++;
      }
      j++;
@@ -311,7 +309,6 @@ static void calcBounds(struct NSVGimage* image)
 }
 
 //reorder the paths to minimize cutter movement. //default is xy = 1
-//static void reorder(SVGPoint* pts, int* cities, int ncity, char xy, City* newCities) {
 static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
   printf("ncity = %d\n", ncity);
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
@@ -330,10 +327,6 @@ static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
       indexB = indexA;
       indexA = temp1;
     }
-    // p1 = pts[cities[indexA]];
-    // p2 = pts[cities[indexA+1]];
-    // p3 = pts[cities[indexB]];
-    // p4 = pts[cities[indexB+1]];
     //test integration of city struct
     pn1 = pts[newCities[indexA].id];
     pn2 = pts[newCities[indexA+1].id];
@@ -341,57 +334,38 @@ static void reorder(SVGPoint* pts, int ncity, char xy, City* newCities) {
     pn4 = pts[newCities[indexB+1].id];
     dnx = pn1.x-pn2.x;
     dny = pn1.y-pn2.y;
-    // dx = p1.x-p2.x;
-    // dy = p1.y-p2.y;
     if(xy) {
       ndist = dnx * dnx + dny * dny;
-      //dist = dx*dx+dy*dy;
     } else {
       ndist = dny * dny;
-      //dist = dy*dy;
     }
-    // dx = p3.x-p4.x;
-    // dy = p3.y-p4.y;
     dnx = pn3.x-pn4.x;
     dny = pn3.y-pn4.y;
 
     if(xy) {
       ndist += (dnx * dnx + dny * dny);
-      //dist += (dx*dx+dy*dy);
     } else {
       ndist += dny * dny;
-      //dist += dy*dy;
     }
-    // dx = p1.x-p3.x;
-    // dy = p1.y-p3.y;
     dnx = pn1.x - pn3.x;
     dny = pn1.y - pn3.y;
     if(xy){
       ndist2 = dnx * dnx + dny * dny;
-      //dist2 = dx*dx+dy*dy;
     } else {
       ndist2 = dny * dny;
-      //dist2 = dy*dy;
     }      
-    // dx = p2.x-p4.x;
-    // dy = p2.y-p4.y;
     dnx = pn2.x - pn4.x;
     dny = pn2.y - pn4.y;
     if(xy) {
       ndist2 += dnx * dnx + dny * dny;
-      //dist2 += (dx*dx+dy*dy);
     } else {
       ndist2 += dny * dny;
-      //dist2 += dy*dy;
     }
     if(ndist2 < ndist) {
       indexH = indexB;
       indexL = indexA+1;
       while(indexH > indexL) { //test newCities swap.
-        //temp1 = cities[indexL];
         temp = newCities[indexL];
-        //cities[indexL]=cities[indexH];
-        //cities[indexH] = temp1;
         newCities[indexL]=newCities[indexH];
         newCities[indexH] = temp;
         indexH--;
@@ -431,7 +405,7 @@ void help() {
   SVGPoint* points;
   ToolPath* paths;
   City *newCities;
-  int *cities,npaths;
+  int npaths;
   int feed = 3500;
   int fullspeed=4800;
   int cityStart=1;
@@ -606,7 +580,6 @@ seedrand((float)time(0));
   // allocate memory
   //why are these all 2x neccesary size?
   points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
-  cities = (int*)malloc(pathCount*2*sizeof(int)); //new city struct that tracks stroke color?
   paths = (ToolPath*)malloc(pointsCount*2*sizeof(ToolPath));
   newCities = (City*)malloc(pathCount*2*sizeof(City));
 
@@ -619,7 +592,6 @@ seedrand((float)time(0));
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    // reorder(points, cities, pathCount, xy, newCities);
     reorder(points, pathCount, xy, newCities);
     printf("%d... ",k);
     fflush(stdout);
@@ -828,7 +800,6 @@ seedrand((float)time(0));
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
-  free(cities); 
   free(paths);
   free(newCities);
   nsvgDelete(g_image);
