@@ -326,25 +326,33 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
   printf("shapeCount = %d\n",shapeCount);
 }
 
+//sort array by color defined int.
+int colorComp(const void * a, const void * b) {
+  const City *A = a, *B = b;
+  int x = A->stroke.color, y = B->stroke.color;
+  return (x > y) - (x < y);
+}
+
+
+//need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
 //reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int ncity, char xy, City* cities) {
+static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* penList) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   City temp;
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
-  for(i=0;i<800*ncity;i++) {
-    indexA = (int)(RANDOM()*(ncity-2));
-    indexB = (int)(RANDOM()*(ncity-2));
+  for(i=0;i<800*pathCount;i++) {
+    indexA = (int)(RANDOM()*(pathCount-2));
+    indexB = (int)(RANDOM()*(pathCount-2));
     if(abs(indexB-indexA) < 2){
       continue;
     }
-    if(indexB < indexA) {
+    if(indexB < indexA) { //work from left index a and right index b.
       temp1 = indexB;
       indexB = indexA;
       indexA = temp1;
     }
-    //test integration of city struct
     pn1 = pts[cities[indexA].id];
     pn2 = pts[cities[indexA+1].id];
     pn3 = pts[cities[indexB].id];
@@ -466,6 +474,7 @@ void help() {
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
+  FILE *debug;
   int pwr = 90;
   int ch;
   int dwell = -1;
@@ -533,11 +542,11 @@ void help() {
 
   penList = (Pen*)malloc(numTools*sizeof(Pen));
   penList[0].color = -16776966;
-  penList[1].color = -784384;
-  penList[2].color = NULL;
-  penList[3].color = NULL;
-  penList[4].color = NULL;
-  penList[5].color = NULL;
+  penList[1].color = -15597568;
+  penList[2].color = -14352384;
+  penList[3].color = -13107200;
+  penList[4].color = -9371648;
+  penList[5].color = -720896;
 
   calcBounds(g_image, numTools, penList);
   printf("Color counts:\n");
@@ -623,18 +632,20 @@ seedrand((float)time(0));
   
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
-  //at this point we have cities populated with id and color.
 
-  printf("Reorder with numCities: %d\n",pathCount);
-  for(k=0;k<numReord;k++) {
-    reorder(points, pathCount, xy, cities);
-    printf("%d... ",k);
-    if(k == numReord-1){
-      printf("\nncity = %d", pathCount);
-    }
-    fflush(stdout);
-  }
-  printf("\n");
+
+  qsort(cities, pathCount, sizeof(City), colorComp);
+  // Cities are being properly sorted.
+
+  debug = fopen("../debug.txt", "w");
+  // printf("Reorder with numCities: %d\n",pathCount);
+  // for(k=0;k<numReord;k++) {
+  //   reorder(points, pathCount, xy, cities, penList);
+  //   printf("%d... ",k);
+  //   fflush(stdout);
+  // }
+  // printf("\n");
+
   if(first) {
     fprintf(gcode,GHEADER);
   }
@@ -644,18 +655,19 @@ seedrand((float)time(0));
   //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
-  int skipCond = 0;
-  int writeCond = 0; 
+  // int skipCond = 0;
+  // int writeCond = 0; 
   for(i=0;i<pathCount;i++) { //equal to the number of cities.
     cityStart=1;
-    for(k=0;k<npaths;k++) { //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
+    for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
-      if(paths[k].city == -1){
-        skipCond++;
+      if(paths[k].city != cities[i].id){
 	      continue;
-      }
-      if(paths[k].city == cities[i].id) {
-        writeCond++;
+      } else if(paths[k].city == cities[i].id) {
+        //Cities should be ordered by color.
+        //If the currently examined path is in the city at i, begin writing.
+        //Can I move all writing to output to this location?
+        fprintf(debug,"City at i = %d. Id:%d Color:%d\n",i, cities[i].id ,cities[i].stroke.color);
         break;
       }
     }
@@ -676,16 +688,16 @@ seedrand((float)time(0));
       maxy = y;
     if(y < miny)
       miny = y;
-
+    
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
 
-#ifndef G32
-    else {
-      fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
-      fprintf(gcode,"G4 P0\n");
-    }
-#endif    
+// #ifndef G32
+//     else {
+//       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
+//       fprintf(gcode,"G4 P0\n");
+//     }
+// #endif    
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
@@ -698,7 +710,6 @@ seedrand((float)time(0));
     fprintf(gcode,"G4 P0\n");
 #endif
     printed=0;
-    if(tsp) {continue;}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
@@ -737,6 +748,8 @@ seedrand((float)time(0));
               d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
               printed = 1;
               //fprintf(stderr,"printed = 1\n");
+              // fprintf(debug, "Writing from DoBez:5\n");
+              // fprintf(gcode, "( Writing from DoBez )\n");
               fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
               if(cityStart==1){
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
@@ -843,11 +856,12 @@ seedrand((float)time(0));
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
+  fclose(debug);
   free(points);
   free(paths);
   free(cities);
   nsvgDelete(g_image);
-  printf("writeCond reached = %d\n", writeCond);
-  printf("skipCond reached = %d\n", skipCond);
+  // printf("writeCond reached = %d\n", writeCond);
+  // printf("skipCond reached = %d\n", skipCond);
   return 0;
 }
