@@ -747,70 +747,13 @@ seedrand((float)time(0));
               
               d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
               printed = 1;
-              //fprintf(stderr,"printed = 1\n");
-              // fprintf(debug, "Writing from DoBez:5\n");
-              // fprintf(gcode, "( Writing from DoBez )\n");
               fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
               if(cityStart==1){
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
-              }
-        #ifndef	  G32    
-                fprintf(gcode,"G4 P0\n");
-        #endif	      
+              }    
               bxold = bx;
               byold = by;
-            }
-          } else {
-            x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-            y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-            if(flip)
-              y = -y;
-            if(x > maxx)
-              maxx = x;
-            if(x < minx)
-              minx = x;
-            if(y > maxy)
-              maxy = y;
-            if(y < miny)
-              miny = y;
-
-            if(1) {
-              if(1) {
-                printed = 1;
-                fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
-        #ifndef	 G32 
-                fprintf(gcode,"G4 P0\n");
-        #endif
-              } else {
-                ;//continue;
-                //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
-                //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-              }
-              first = 0;
-              xold = x;
-              yold = y;
-            } else {
-              x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-              y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-              if(flip)
-                y = -y;
-              fprintf(gcode,CUTTEROFF);
-              //fprintf(gcode,"( simplified )\n");
-              fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-        #ifndef G32	    
-              fprintf(gcode,"G4 P0\n");
-        #endif	    
-              x = (paths[j].points[2]-fabs(bounds[0]))*scale+shiftX;
-              y = (paths[j].points[3]-fabs(bounds[1]))*scale+shiftY;
-              if(flip)
-                y = -y;
-        #ifndef	 G32  
-              fprintf(gcode,CUTTERON,pwr);
-        #endif	    
-              //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-              xold = x;
-              yold = y;
             }
           }
           paths[j].city = -1;
