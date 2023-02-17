@@ -73,6 +73,11 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
+  int color;
+  int count;
+} Pen;
+
+typedef struct {
   float points[8];
   int city;
   char closed;
@@ -277,11 +282,12 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 }
 
 //calculate the svg space bounds for the image and create initial city sized list of colors.
-static void calcBounds(struct NSVGimage* image)
+static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
 {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i;
+  int colorMatch = 0;
   bounds[0] = FLT_MAX;
   bounds[1] = FLT_MAX;
   bounds[2] = -FLT_MAX;
@@ -299,8 +305,20 @@ static void calcBounds(struct NSVGimage* image)
         bounds[3] = maxf(bounds[3], p[1]);
 	      pointsCount++;
       }
-      pathCount++; //paths seem to correlate to city. track list of colors, sort with cities in reorder.
-      // need to modify reorder to sort by colors, then proximity.
+      pathCount++;
+          }
+    //add to penList[n] here based on color.
+    for(int c = 0; c < numTools; c++){
+        if(shape->stroke.color == penList[c].color){
+          penList[c].count++;
+          colorMatch =1;
+          continue;
+        }
+      }
+    if(colorMatch ==0){ //if no color match was found add to tool 1
+      penList[0].count++;
+    } else {
+      colorMatch =0;
     }
     shapeCount++;
   }
@@ -404,6 +422,10 @@ void help() {
   SVGPoint* points;
   ToolPath* paths;
   City *cities;
+  //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
+  Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
+  int numTools = 6;
+  int *colorLayer; //hold translation to color order.
   int npaths;
   int feed = 15000;
   int fullspeed=22000;
@@ -420,10 +442,10 @@ void help() {
   float margin = 50.8; //xmargin around drawn elements in mm
   float ymargin = 25.4; //ymargin around drawn elements in mm
   float materialDimensions[2];
-  int fitToMaterial = 0;
-  int centerOnMaterial =1;
-  int currColor =-1;
-  int nColors =-1;
+  int fitToMaterial =  0;
+  int centerOnMaterial = 1;
+  int currColor = -1;
+  int nColors = 6; //assume 6 colors for now. default/undef color slot is p1. black int = -16777216
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
@@ -501,7 +523,6 @@ void help() {
       break;
     }
   }
-  
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   g_image = nsvgParseFromFile(argv[optind],"px",96);
@@ -509,7 +530,20 @@ void help() {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
   }
-  calcBounds(g_image);
+
+  penList = (Pen*)malloc(numTools*sizeof(Pen));
+  penList[0].color = -16776966;
+  penList[1].color = -784384;
+  penList[2].color = NULL;
+  penList[3].color = NULL;
+  penList[4].color = NULL;
+  penList[5].color = NULL;
+
+  calcBounds(g_image, numTools, penList);
+  printf("Color counts:\n");
+  for(int c = 0; c<numTools;c++){
+    printf("\tp%d=%d\n",c,penList[c].count);
+  }
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
@@ -583,6 +617,8 @@ seedrand((float)time(0));
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   cities = (City*)malloc(pathCount*sizeof(City));
+  colorLayer = (int*)malloc(pathCount*sizeof(int));
+
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   
   npaths = 0;
@@ -591,11 +627,11 @@ seedrand((float)time(0));
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    if(k%5 == 0){
-      printf("ncity = %d\n", pathCount);
-    }
     reorder(points, pathCount, xy, cities);
     printf("%d... ",k);
+    if(k == numReord-1){
+      printf("\nncity = %d", pathCount);
+    }
     fflush(stdout);
   }
   printf("\n");
