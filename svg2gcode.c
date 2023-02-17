@@ -56,7 +56,7 @@
                       // or add newline "\n" if not needed
 #endif
 #define CUTTEROFF "M5\n" // same for this
-#define GFOOTER "M30\n"
+#define GFOOTER "M5\nM30\n "
 //#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
 #define GMODE "M4\n"
 //#define DO_HPGL //uncomment to get hpgl-file named test.hpgl on current folder
@@ -760,42 +760,14 @@ seedrand((float)time(0));
       } else
 	        break;
     }
-    if(tsp)
-      continue;
     if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
-#ifndef G32      
-      fprintf(gcode,"G4 P0\n");
-#endif      
       printed = 1;
     }
-    if(1) { //cnc mode replacement
-      if(!printed) {
-#ifndef G32	
-	if(dwell != -1) {
-	  fprintf(gcode,"M3 S10\n");
-	  sprintf(gbuff,"G4 P%d\n",dwell);
-	  fprintf(gcode,"%s",gbuff);
-	}
-	fprintf(gcode,"M5\n");
-#endif	
-      }
-#ifndef G32      
-      fprintf(gcode,CUTTEROFF);
-#endif      
-    } else {
-      fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
-      fprintf(gcode,"G4 P0\n");
-      printed = 0;
-    } 
+
   }
-#ifndef G32  
-  if(tsp) {fprintf(gcode,CUTTEROFF);}
-#else
-  fprintf(gcode,"M5\n");
-#endif  
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
