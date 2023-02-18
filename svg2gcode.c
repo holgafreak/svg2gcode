@@ -45,21 +45,12 @@
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
-#define GHEADER "G90\n" //G92 X0 Y0\n //add here your specific G-codes
+#define GHEADER "G90\nG0 M3 S%d\n" //G92 X0 Y0\n //add here your specific G-codes
 #define GHEADER_NEW "nG90\n" //G92 X0 Y0\n //add here your specific G-codes
-                                  //separated with newline \n
-#define G32
-#ifdef G32
 #define CUTTERON "G0 M3 S%d\n"
-#else
-#define CUTTERON "M3 S%d\n" //I chose this, change to yours or add comment
-                      // or add newline "\n" if not needed
-#endif
 #define CUTTEROFF "M5\n" // same for this
 #define GFOOTER "M5\nM30\n "
-//#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
 #define GMODE "M4\n"
-//#define DO_HPGL //uncomment to get hpgl-file named test.hpgl on current folder
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
@@ -256,7 +247,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #endif
 	 *npaths = 0;
 	 return;
-	 
        }
        if(i>pathCount) {
 	 printf("error i > \n");
@@ -279,6 +269,57 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   fprintf(f,"PU0,0;\n");
   fclose(f);
 #endif
+}
+
+void merge(City * arr, int left, int mid, int right) {
+    int n1 = mid - left + 1;
+    int n2 = right - mid;
+
+    City *leftArr = (City *) malloc(n1 * sizeof(City));
+    City *rightArr = (City *) malloc(n2 * sizeof(City));
+
+    for (int i = 0; i < n1; i++) {
+        leftArr[i] = arr[left + i];
+    }
+    for (int i = 0; i < n2; i++) {
+        rightArr[i] = arr[mid + 1 + i];
+    }
+
+    int i = 0, j = 0, k = left;
+    while (i < n1 && j < n2) {
+        if (leftArr[i].stroke.color <= rightArr[j].stroke.color) {
+            arr[k] = leftArr[i];
+            i++;
+        } else {
+            arr[k] = rightArr[j];
+            j++;
+        }
+        k++;
+    }
+
+    while (i < n1) {
+        arr[k] = leftArr[i];
+        i++;
+        k++;
+    }
+
+    while (j < n2) {
+        arr[k] = rightArr[j];
+        j++;
+        k++;
+    }
+
+    free(leftArr);
+    free(rightArr);
+}
+
+void mergeSort(City * arr, int left, int right) {
+    if (left < right) {
+        int mid = left + (right - left) / 2;
+        mergeSort(arr, left, mid);
+        mergeSort(arr, mid + 1, right);
+        merge(arr, left, mid, right);
+    }
 }
 
 //calculate the svg space bounds for the image and create initial city sized list of colors.
@@ -421,9 +462,6 @@ void help() {
   printf("\t-h this help\n");}
   
   int main(int argc, char* argv[]) {
-#ifndef G32
-  printf("G32 Undefined\n");
-#endif
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
@@ -549,10 +587,12 @@ void help() {
   penList[5].color = -720896;
 
   calcBounds(g_image, numTools, penList);
+
   printf("Color counts:\n");
   for(int c = 0; c<numTools;c++){
     printf("\tp%d=%d\n",c,penList[c].count);
   }
+
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
@@ -632,9 +672,8 @@ seedrand((float)time(0));
   
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
-
-
-  qsort(cities, pathCount, sizeof(City), colorComp);
+  //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
+  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   // Cities are being properly sorted.
 
   debug = fopen("../debug.txt", "w");
@@ -647,21 +686,18 @@ seedrand((float)time(0));
   // printf("\n");
 
   if(first) {
-    fprintf(gcode,GHEADER);
+    fprintf(gcode,GHEADER,pwr);
   }
-#ifdef G32
-  fprintf(gcode,CUTTERON,pwr);
-#endif  
+
   //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
-  // int skipCond = 0;
-  // int writeCond = 0; 
+
   for(i=0;i<pathCount;i++) { //equal to the number of cities.
     cityStart=1;
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
-      if(paths[k].city != cities[i].id){
+      if(paths[k].city == -1){ //means already written
 	      continue;
       } else if(paths[k].city == cities[i].id) {
         //Cities should be ordered by color.
@@ -678,26 +714,19 @@ seedrand((float)time(0));
     firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
     if(flip) {
       firsty = -firsty;
-      y = -y;
-    }
-    if(x > maxx)
+      y = -y; 
+    } if(x > maxx){
       maxx = x;
-    if(x < minx)
+    } if(x < minx){
       minx = x;
-    if(y > maxy)
+    } if(y > maxy){
       maxy = y;
-    if(y < miny)
+    } if(y < miny){
       miny = y;
+    }
     
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-
-// #ifndef G32
-//     else {
-//       fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
-//       fprintf(gcode,"G4 P0\n");
-//     }
-// #endif    
+    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y); 
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
@@ -705,10 +734,6 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
-#ifndef G32 
-    fprintf(gcode,CUTTERON,pwr);
-    fprintf(gcode,"G4 P0\n");
-#endif
     printed=0;
     for(j=k;j<npaths;j++) {
       xold = x;
@@ -756,7 +781,7 @@ seedrand((float)time(0));
               byold = by;
             }
           }
-          paths[j].city = -1;
+          paths[j].city = -1; //this path has been written
       } else
 	        break;
     }
@@ -766,7 +791,6 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
       printed = 1;
     }
-
   }
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
