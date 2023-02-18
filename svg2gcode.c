@@ -211,7 +211,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
      for(path = shape->paths; path != NULL; path=path->next) {
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
-        if(j==0) {
+        if(j==0) {//add first two points. this is for lines and not bezier paths.
         points[i].x = pp[0];
         points[i].y = pp[1];
 #ifdef DO_HPGL
@@ -222,7 +222,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
         fflush(f);
 #endif
 	      }
-        if(doBez) {
+        if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
           for(b=0;b<8;b++){
@@ -235,7 +235,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           paths[k].points[3] = pp[1];
         }
         paths[k].closed = path->closed;
-        paths[k].city = i; 
+        paths[k].city = i; //assign points in this path/shape to city i.
         k++;
        }
      cont:       
@@ -259,7 +259,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
        cities[i].id = i;
        cities[i].stroke = shape->stroke;
        //printf("City number %d color = %d\n", i, (shape->stroke.color));
-       i++;
+       i++; //setting up cities
      }
      j++;
   }
@@ -673,17 +673,17 @@ seedrand((float)time(0));
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
   //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
-  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  //mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   // Cities are being properly sorted.
 
   debug = fopen("../debug.txt", "w");
-  // printf("Reorder with numCities: %d\n",pathCount);
-  // for(k=0;k<numReord;k++) {
-  //   reorder(points, pathCount, xy, cities, penList);
-  //   printf("%d... ",k);
-  //   fflush(stdout);
-  // }
-  // printf("\n");
+  printf("Reorder with numCities: %d\n",pathCount);
+  for(k=0;k<numReord;k++) {
+    reorder(points, pathCount, xy, cities, penList);
+    printf("%d... ",k);
+    fflush(stdout);
+  }
+  printf("\n");
 
   if(first) {
     fprintf(gcode,GHEADER,pwr);
