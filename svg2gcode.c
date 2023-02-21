@@ -51,6 +51,7 @@
 #define CUTTEROFF "M5\n" // same for this
 #define GFOOTER "M5\nM30\n "
 #define GMODE "M4\n"
+
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
@@ -66,6 +67,7 @@ typedef struct {
 typedef struct {
   int color;
   int count;
+  int slot;
 } Pen;
 
 typedef struct {
@@ -271,6 +273,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #endif
 }
 
+//submethod for mergeSort
 void merge(City * arr, int left, int mid, int right) {
     int n1 = mid - left + 1;
     int n2 = right - mid;
@@ -313,6 +316,7 @@ void merge(City * arr, int left, int mid, int right) {
     free(rightArr);
 }
 
+//sub array implementation of merge sort for sorting cities by color
 void mergeSort(City * arr, int left, int right) {
     if (left < right) {
         int mid = left + (right - left) / 2;
@@ -471,7 +475,6 @@ void help() {
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
   int numTools = 6;
-  int *colorLayer; //hold translation to color order.
   int npaths;
   int feed = 15000;
   int fullspeed=22000;
@@ -490,7 +493,10 @@ void help() {
   float materialDimensions[2];
   int fitToMaterial =  0;
   int centerOnMaterial = 1;
-  int currColor = -1;
+  int currColor = 1; //if currColor == 1, then no tool is currently being held.
+  int targetColor = 0;
+  int targetTool = 0; //start as 0 so no tool is matched
+  int colorMatch = 0;
   int nColors = 6; //assume 6 colors for now. default/undef color slot is p1. black int = -16777216
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
@@ -578,13 +584,21 @@ void help() {
     return -1;
   }
 
+
+  //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
-  penList[0].color = -16776966;
-  penList[1].color = -15597568;
-  penList[2].color = -14352384;
-  penList[3].color = -13107200;
-  penList[4].color = -9371648;
-  penList[5].color = -720896;
+  penList[0].color = -16776966; //default, unassigned, black color.
+  penList[0].slot = 1; //in tool slot 1 g1a0
+  penList[1].color = -65536;
+  penList[1].slot = 2;
+  penList[2].color = -14013697;
+  penList[2].slot = 3;
+  penList[3].color = -15066598;
+  penList[3].slot = 4;
+  penList[4].color = 1;
+  penList[4].slot = 5;
+  penList[5].color = 1;
+  penList[5].slot = 6;
 
   calcBounds(g_image, numTools, penList);
 
@@ -666,14 +680,12 @@ seedrand((float)time(0));
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   cities = (City*)malloc(pathCount*sizeof(City));
-  colorLayer = (int*)malloc(pathCount*sizeof(int));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
   //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
-  //mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   // Cities are being properly sorted.
 
   debug = fopen("../debug.txt", "w");
@@ -683,6 +695,8 @@ seedrand((float)time(0));
     printf("%d... ",k);
     fflush(stdout);
   }
+  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
+  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   printf("\n");
 
   if(first) {
@@ -700,10 +714,6 @@ seedrand((float)time(0));
       if(paths[k].city == -1){ //means already written
 	      continue;
       } else if(paths[k].city == cities[i].id) {
-        //Cities should be ordered by color.
-        //If the currently examined path is in the city at i, begin writing.
-        //Can I move all writing to output to this location?
-        fprintf(debug,"City at i = %d. Id:%d Color:%d\n",i, cities[i].id ,cities[i].stroke.color);
         break;
       }
     }
@@ -724,6 +734,60 @@ seedrand((float)time(0));
     } if(y < miny){
       miny = y;
     }
+    //colorCheck and tracking
+    if(cityStart ==1){
+      targetColor = cities[i].stroke.color;
+      if(currColor == 1){ //no tool picked up
+        for(int p = 0; p<numTools; p++){
+          if(penList[p].color == targetColor){
+            targetTool = p;
+            break;
+          }
+        } 
+        if (targetTool == 0) { //no match found
+          currColor = penList[0].color; //assigning current color to default color
+        } else {
+          currColor = targetColor; // match found so assign current color to targetColor
+        }
+        fprintf(gcode,"( Color change with no previous tool )");
+        fprintf(gcode, "G1A%d\n", targetTool*60); //rotate to default color slot
+        fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+        fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+        fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+        //need to add pickup logic
+      } 
+      if(currColor < 0){ //there is a tool picked up
+        if(currColor != cities[i].stroke.color){ //current color is not this city's color. need to rotate a-axis to current color to put back.
+          for(int p = 0; p<numTools; p++){
+            if(penList[p].color == currColor){ //find slot of current color
+              targetTool = p;
+              break;
+            }
+          }
+          fprintf(gcode,"( Color change with previous tool )");
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to put away current color
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
+          fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+        } //now we need to rotate to new color, then repeat.
+        for(int p = 0; p<numTools; p++){ //find target tool slot
+          if(penList[p].color == targetColor){
+            targetTool = p;
+            break;
+          }
+          targetTool = 0;
+        } 
+        if (targetTool == 0) { //no match found
+          currColor = penList[0].color; //assigning current color to default color
+        } else {
+          currColor = targetColor; // match found so assign current color to targetColor
+        }
+        fprintf(gcode, "G1A%d\n", targetTool*60); //rotate to default color slot
+        fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+        fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+        fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+      }
+    }
     
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y); 
@@ -731,6 +795,7 @@ seedrand((float)time(0));
     fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
+          fprintf(gcode, "( from city start main)\n");
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
@@ -772,8 +837,10 @@ seedrand((float)time(0));
               
               d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
               printed = 1;
+              //fprintf(gcode, "Line added from doBez in main: ");
               fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-              if(cityStart==1){
+              if(cityStart==1){          
+                fprintf(gcode, "( from city start in doBez)\n");
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
               }    
@@ -792,6 +859,7 @@ seedrand((float)time(0));
       printed = 1;
     }
   }
+  fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
