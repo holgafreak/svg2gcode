@@ -498,7 +498,7 @@ void help() {
   int targetTool = 0; //start as 0 so no tool is matched
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
-  float tol = 0.1; //smaller is better
+  float tol = 1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
   float xold,yold;
