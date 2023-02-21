@@ -692,7 +692,7 @@ seedrand((float)time(0));
     fflush(stdout);
   }
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
-  //mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   printf("\n");
 
   if(first) {
