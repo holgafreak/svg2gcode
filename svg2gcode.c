@@ -477,6 +477,7 @@ void help() {
   int numTools = 6;
   int npaths;
   int feed = 15000;
+  int slowTravel = 3500;
   int fullspeed=22000;
   int cityStart=1;
   float zFloor = -1.;
@@ -691,7 +692,7 @@ seedrand((float)time(0));
     fflush(stdout);
   }
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
-  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  //mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   printf("\n");
 
   if(first) {
@@ -747,14 +748,14 @@ seedrand((float)time(0));
           //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
           //add pickup and dropoff logic
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-          fprintf(gcode, "G1 Z0\n");
+          fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
-          fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+          fprintf(gcode, "G1 X-52 F%d\n", slowTravel); //slow move to dropoff
+          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
-          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          fprintf(gcode, "G1 X-51 F2000\n"); //slow move to pickup
+          fprintf(gcode, "G1 X0 F2000\n"); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
         }
@@ -762,10 +763,10 @@ seedrand((float)time(0));
           currColor = penList[targetTool].color;
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to default color slot
-          fprintf(gcode, "G1 Z0\n");
+          fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
-          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          fprintf(gcode, "G1 X-51 F%d\n", slowTravel); //slow move to pickup
+          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
         }   
