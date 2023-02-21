@@ -747,12 +747,12 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to dropoff
+          fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to pickup
-          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
+          fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to pickup
+          fprintf(gcode, "G1 X0 F%i\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
         }
@@ -762,7 +762,7 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to pickup
+          fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
