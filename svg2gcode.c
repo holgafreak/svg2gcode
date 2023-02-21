@@ -496,6 +496,7 @@ void help() {
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
   int targetTool = 0; //start as 0 so no tool is matched
+  int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
   int nColors = 6; //assume 6 colors for now. default/undef color slot is p1. black int = -16777216
   float tol = 0.1; //smaller is better
@@ -588,17 +589,11 @@ void help() {
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
   penList[0].color = -16776966; //default, unassigned, black color.
-  penList[0].slot = 1; //in tool slot 1 g1a0
   penList[1].color = -65536;
-  penList[1].slot = 2;
   penList[2].color = -14013697;
-  penList[2].slot = 3;
   penList[3].color = -15066598;
-  penList[3].slot = 4;
   penList[4].color = 1;
-  penList[4].slot = 5;
   penList[5].color = 1;
-  penList[5].slot = 6;
 
   calcBounds(g_image, numTools, penList);
 
@@ -734,59 +729,47 @@ seedrand((float)time(0));
     } if(y < miny){
       miny = y;
     }
+
     //colorCheck and tracking
     if(cityStart ==1){
       targetColor = cities[i].stroke.color;
-      if(currColor == 1){ //no tool picked up
+      if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
           if(penList[p].color == targetColor){
-            targetTool = p;
+            targetTool = p; 
             break;
           }
-        } 
-        if (targetTool == 0) { //no match found
-          currColor = penList[0].color; //assigning current color to default color
-        } else {
-          currColor = targetColor; // match found so assign current color to targetColor
+          targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
         }
-        fprintf(gcode,"( Color change with no previous tool )");
-        fprintf(gcode, "G1A%d\n", targetTool*60); //rotate to default color slot
-        fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-        fprintf(gcode, "G1 X-51\n"); //slow move to pickup
-        fprintf(gcode, "G1 X0\n"); //slow move away from pickup
-        //need to add pickup logic
-      } 
-      if(currColor < 0){ //there is a tool picked up
-        if(currColor != cities[i].stroke.color){ //current color is not this city's color. need to rotate a-axis to current color to put back.
-          for(int p = 0; p<numTools; p++){
-            if(penList[p].color == currColor){ //find slot of current color
-              targetTool = p;
-              break;
-            }
-          }
-          fprintf(gcode,"( Color change with previous tool )");
-          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to put away current color
+      }
+      if(targetTool != currTool){ //need to check if tool picked up previously or not
+        if(currTool >= 0){ //tool is being held
+          //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
+          //add pickup and dropoff logic
+          fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+          fprintf(gcode, "G1 Z0\n");
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
           fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
-        } //now we need to rotate to new color, then repeat.
-        for(int p = 0; p<numTools; p++){ //find target tool slot
-          if(penList[p].color == targetColor){
-            targetTool = p;
-            break;
-          }
-          targetTool = 0;
-        } 
-        if (targetTool == 0) { //no match found
-          currColor = penList[0].color; //assigning current color to default color
-        } else {
-          currColor = targetColor; // match found so assign current color to targetColor
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          //fprintf(gcode, "( Tool change finished )\n");
+          currTool = targetTool;
         }
-        fprintf(gcode, "G1A%d\n", targetTool*60); //rotate to default color slot
-        fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-        fprintf(gcode, "G1 X-51\n"); //slow move to pickup
-        fprintf(gcode, "G1 X0\n"); //slow move away from pickup
-      }
+        if(currTool == -1){ //no tool picked up
+          currColor = penList[targetTool].color;
+          //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to default color slot
+          fprintf(gcode, "G1 Z0\n");
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          //fprintf(gcode, "( Tool change finished )\n");
+          currTool = targetTool;
+        }   
+      }      
     }
     
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
@@ -795,7 +778,6 @@ seedrand((float)time(0));
     fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
-          fprintf(gcode, "( from city start main)\n");
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
@@ -840,7 +822,6 @@ seedrand((float)time(0));
               //fprintf(gcode, "Line added from doBez in main: ");
               fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
               if(cityStart==1){          
-                fprintf(gcode, "( from city start in doBez)\n");
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
               }    
@@ -860,6 +841,11 @@ seedrand((float)time(0));
     }
   }
   fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+  //drop off current tool
+  fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+  fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+  fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
+  fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
