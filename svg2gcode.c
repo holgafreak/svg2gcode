@@ -518,7 +518,6 @@ void help() {
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
-  FILE *debug;
   int pwr = 90;
   int ch;
   int dwell = -1;
@@ -682,7 +681,6 @@ seedrand((float)time(0));
   //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
   // Cities are being properly sorted.
 
-  debug = fopen("../debug.txt", "w");
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
     reorder(points, pathCount, xy, cities, penList);
@@ -852,7 +850,6 @@ seedrand((float)time(0));
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
-  fclose(debug);
   free(points);
   free(paths);
   free(cities);
