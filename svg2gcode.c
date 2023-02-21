@@ -45,21 +45,13 @@
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
-#define GHEADER "G90\nG92 X0 Y0\n" //add here your specific G-codes
-#define GHEADER_NEW "nG90\nG92 X0 Y0\n" //add here your specific G-codes
-                                  //separated with newline \n
-#define G32
-#ifdef G32
+#define GHEADER "G90\nG0 M3 S%d\n" //G92 X0 Y0\n //add here your specific G-codes
+#define GHEADER_NEW "nG90\n" //G92 X0 Y0\n //add here your specific G-codes
 #define CUTTERON "G0 M3 S%d\n"
-#else
-#define CUTTERON "M3 S%d\n" //I chose this, change to yours or add comment
-                      // or add newline "\n" if not needed
-#endif
 #define CUTTEROFF "M5\n" // same for this
-#define GFOOTER "M30\n"
-//#define GFOOTER "M5\nG0 X0 Y0\n" //end G-code here
+#define GFOOTER "M5\nM30\n "
 #define GMODE "M4\n"
-//#define DO_HPGL //uncomment to get hpgl-file named test.hpgl on current folder
+
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static float bounds[4];
@@ -73,18 +65,26 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
+  int color;
+  int count;
+  int slot;
+} Pen;
+
+typedef struct {
   float points[8];
   int city;
   char closed;
 } ToolPath;
 
+typedef struct {
+  int id;
+  NSVGpaint stroke;
+} City;
+
 static SVGPoint bezPoints[64];
 static SVGPoint first,last;
 static int bezCount = 0;
 #ifdef _WIN32
-//typedef unsigned long int uint64_t;
-//typedef unsigned int  uint32_t;
-
 
 static uint64_t seed;
 
@@ -187,13 +187,14 @@ static void cubicBez(float x1, float y1, float x2, float y2,
 static int pcomp(const void* a, const void* b) {
   SVGPoint* ap = (SVGPoint*)a;
   SVGPoint* bp = (SVGPoint*)b;
-  if(sqrt(ap->x*ap->x + ap->y*ap->y) > sqrt(bp->x*bp->x+bp->y*bp->y))
+  if(sqrt(ap->x*ap->x + ap->y*ap->y) > sqrt(bp->x*bp->x+bp->y*bp->y)) {
     return 1;
+  }
   return -1;
 }
 
-// get all paths and paths to cities
-static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths) {
+// get all paths and paths into cities
+static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
@@ -212,8 +213,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
      for(path = shape->paths; path != NULL; path=path->next) {
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
-        if(j==0) {
-	
+        if(j==0) {//add first two points. this is for lines and not bezier paths.
         points[i].x = pp[0];
         points[i].y = pp[1];
 #ifdef DO_HPGL
@@ -224,7 +224,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
         fflush(f);
 #endif
 	      }
-        if(doBez) {
+        if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
           for(b=0;b<8;b++){
@@ -237,7 +237,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
           paths[k].points[3] = pp[1];
         }
         paths[k].closed = path->closed;
-        paths[k].city = i; 
+        paths[k].city = i; //assign points in this path/shape to city i.
         k++;
        }
      cont:       
@@ -249,7 +249,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 #endif
 	 *npaths = 0;
 	 return;
-	 
        }
        if(i>pathCount) {
 	 printf("error i > \n");
@@ -259,8 +258,10 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 #endif
 	 exit(-1);
        }
-       cities[i] = i;
-       i++;
+       cities[i].id = i;
+       cities[i].stroke = shape->stroke;
+       //printf("City number %d color = %d\n", i, (shape->stroke.color));
+       i++; //setting up cities
      }
      j++;
   }
@@ -272,11 +273,66 @@ static void calcPaths(SVGPoint* points, ToolPath* paths,int *cities, int *npaths
 #endif
 }
 
-static void calcBounds(struct NSVGimage* image)
+//submethod for mergeSort
+void merge(City * arr, int left, int mid, int right) {
+    int n1 = mid - left + 1;
+    int n2 = right - mid;
+
+    City *leftArr = (City *) malloc(n1 * sizeof(City));
+    City *rightArr = (City *) malloc(n2 * sizeof(City));
+
+    for (int i = 0; i < n1; i++) {
+        leftArr[i] = arr[left + i];
+    }
+    for (int i = 0; i < n2; i++) {
+        rightArr[i] = arr[mid + 1 + i];
+    }
+
+    int i = 0, j = 0, k = left;
+    while (i < n1 && j < n2) {
+        if (leftArr[i].stroke.color <= rightArr[j].stroke.color) {
+            arr[k] = leftArr[i];
+            i++;
+        } else {
+            arr[k] = rightArr[j];
+            j++;
+        }
+        k++;
+    }
+
+    while (i < n1) {
+        arr[k] = leftArr[i];
+        i++;
+        k++;
+    }
+
+    while (j < n2) {
+        arr[k] = rightArr[j];
+        j++;
+        k++;
+    }
+
+    free(leftArr);
+    free(rightArr);
+}
+
+//sub array implementation of merge sort for sorting cities by color
+void mergeSort(City * arr, int left, int right) {
+    if (left < right) {
+        int mid = left + (right - left) / 2;
+        mergeSort(arr, left, mid);
+        mergeSort(arr, mid + 1, right);
+        merge(arr, left, mid, right);
+    }
+}
+
+//calculate the svg space bounds for the image and create initial city sized list of colors.
+static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
 {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i;
+  int colorMatch = 0;
   bounds[0] = FLT_MAX;
   bounds[1] = FLT_MAX;
   bounds[2] = -FLT_MAX;
@@ -284,9 +340,9 @@ static void calcBounds(struct NSVGimage* image)
   pathCount = 0;
   pointsCount = 0;
   shapeCount = 0;
-  for (shape = image->shapes; shape != NULL; shape = shape->next) {
-    for (path = shape->paths; path != NULL; path = path->next) {
-      for (i = 0; i < path->npts-1; i++) {
+  for (shape = image->shapes; shape != NULL; shape = shape->next) { //for all shapes in an image. Color is at this level
+    for (path = shape->paths; path != NULL; path = path->next) { //for all path's in a shape. Path's inherit their shape color.
+      for (i = 0; i < path->npts-1; i++) { //for all points in a path.
         float* p = &path->pts[i*2];
         bounds[0] = minf(bounds[0], p[0]);
         bounds[1] = minf(bounds[1], p[1]);
@@ -295,66 +351,93 @@ static void calcBounds(struct NSVGimage* image)
 	      pointsCount++;
       }
       pathCount++;
+          }
+    //add to penList[n] here based on color.
+    for(int c = 0; c < numTools; c++){
+        if(shape->stroke.color == penList[c].color){
+          penList[c].count++;
+          colorMatch =1;
+          continue;
+        }
+      }
+    if(colorMatch ==0){ //if no color match was found add to tool 1
+      penList[0].count++;
+    } else {
+      colorMatch =0;
     }
     shapeCount++;
   }
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
 }
-//reorder  the paths to minimize cutter movement
-static void reorder(SVGPoint* pts, int* cities, int ncity,char xy) {
+
+//sort array by color defined int.
+int colorComp(const void * a, const void * b) {
+  const City *A = a, *B = b;
+  int x = A->stroke.color, y = B->stroke.color;
+  return (x > y) - (x < y);
+}
+
+
+//need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
+//reorder the paths to minimize cutter movement. //default is xy = 1
+static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* penList) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
-  float dx,dy,dist,dist2;
+  City temp;
+  float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
-  for(i=0;i<800*ncity;i++) {
-    indexA = (int)(RANDOM()*(ncity-2));
-    indexB = (int)(RANDOM()*(ncity-2));
-    if(abs(indexB-indexA) < 2)
+  SVGPoint pn1,pn2,pn3,pn4;
+  for(i=0;i<800*pathCount;i++) {
+    indexA = (int)(RANDOM()*(pathCount-2));
+    indexB = (int)(RANDOM()*(pathCount-2));
+    if(abs(indexB-indexA) < 2){
       continue;
-    if(indexB < indexA) {
+    }
+    if(indexB < indexA) { //work from left index a and right index b.
       temp1 = indexB;
       indexB = indexA;
       indexA = temp1;
     }
-    p1 = pts[cities[indexA]];
-    p2 = pts[cities[indexA+1]];
-    p3 = pts[cities[indexB]];
-    p4 = pts[cities[indexB+1]];
-    dx = p1.x-p2.x;
-    dy = p1.y-p2.y;
+    pn1 = pts[cities[indexA].id];
+    pn2 = pts[cities[indexA+1].id];
+    pn3 = pts[cities[indexB].id];
+    pn4 = pts[cities[indexB+1].id];
+    dnx = pn1.x-pn2.x;
+    dny = pn1.y-pn2.y;
     if(xy) {
-      dist = dx*dx+dy*dy;
+      ndist = dnx * dnx + dny * dny;
     } else {
-      dist = dy*dy;
+      ndist = dny * dny;
     }
-    dx = p3.x-p4.x;
-    dy = p3.y-p4.y;
+    dnx = pn3.x-pn4.x;
+    dny = pn3.y-pn4.y;
+
     if(xy) {
-      dist += (dx*dx+dy*dy);
+      ndist += (dnx * dnx + dny * dny);
     } else {
-      dist += dy*dy;
+      ndist += dny * dny;
     }
-    dx = p1.x-p3.x;
-    dy = p1.y-p3.y;
+    dnx = pn1.x - pn3.x;
+    dny = pn1.y - pn3.y;
     if(xy){
-      dist2 = dx*dx+dy*dy;
+      ndist2 = dnx * dnx + dny * dny;
     } else {
-      dist2 = dy*dy;
+      ndist2 = dny * dny;
     }      
-    dx = p2.x-p4.x;
-    dy = p2.y-p4.y;
+    dnx = pn2.x - pn4.x;
+    dny = pn2.y - pn4.y;
     if(xy) {
-      dist2 += (dx*dx+dy*dy);
+      ndist2 += dnx * dnx + dny * dny;
     } else {
-      dist2 += dy*dy;
+      ndist2 += dny * dny;
     }
-    if(dist2 < dist) {
+    if(ndist2 < ndist) {
       indexH = indexB;
       indexL = indexA+1;
-      while(indexH > indexL) {
-        temp1 = cities[indexL];
+      while(indexH > indexL) { //test cities swap.
+        temp = cities[indexL];
         cities[indexL]=cities[indexH];
-        cities[indexH] = temp1;
+        cities[indexH] = temp;
         indexH--;
         indexL++;
       }
@@ -383,18 +466,18 @@ void help() {
   printf("\t-h this help\n");}
   
   int main(int argc, char* argv[]) {
-#ifndef G32
-  printf("G32 Undefined\n");
-#endif
   int i,j,k,l,first = 1;
-  //struct NSVGimage* image;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
   ToolPath* paths;
-  int *cities,npaths;
-  int feed = 3500;
-  int fullspeed=4800;
+  City *cities;
+  //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
+  Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
+  int numTools = 6;
+  int npaths;
+  int feed = 15000;
+  int fullspeed=22000;
   int cityStart=1;
   float zFloor = -1.;
   float ztraverse = -1.;
@@ -403,12 +486,19 @@ void help() {
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
-  int numReord = 30; //
+  int numReord = 30;
   float scale = 0.05; //make this dynamic. //this changes with widthInmm
-  float margin = 10; //margin around drawn elements in mm
+  float margin = 50.8; //xmargin around drawn elements in mm
+  float ymargin = 25.4; //ymargin around drawn elements in mm
   float materialDimensions[2];
-  int fitToMaterial = 0;
-  int centerOnMaterial =1;
+  int fitToMaterial =  0;
+  int centerOnMaterial = 1;
+  int currColor = 1; //if currColor == 1, then no tool is currently being held.
+  int targetColor = 0;
+  int targetTool = 0; //start as 0 so no tool is matched
+  int currTool = -1; //-1 indicates no tool picked up
+  int colorMatch = 0;
+  int nColors = 6; //assume 6 colors for now. default/undef color slot is p1. black int = -16777216
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
@@ -429,6 +519,7 @@ void help() {
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
+  FILE *debug;
   int pwr = 90;
   int ch;
   int dwell = -1;
@@ -476,7 +567,7 @@ void help() {
       flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
-              ztraverse = zFloor+5.; //dynamicize machine dimensions in z.
+              ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
               fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
@@ -486,7 +577,6 @@ void help() {
       break;
     }
   }
-  
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   g_image = nsvgParseFromFile(argv[optind],"px",96);
@@ -494,7 +584,24 @@ void help() {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
   }
-  calcBounds(g_image);
+
+
+  //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
+  penList = (Pen*)malloc(numTools*sizeof(Pen));
+  penList[0].color = -16776966; //default, unassigned, black color.
+  penList[1].color = -65536;
+  penList[2].color = -14013697;
+  penList[3].color = -15066598;
+  penList[4].color = 1;
+  penList[5].color = 1;
+
+  calcBounds(g_image, numTools, penList);
+
+  printf("Color counts:\n");
+  for(int c = 0; c<numTools;c++){
+    printf("\tp%d=%d\n",c,penList[c].count);
+  }
+
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
@@ -504,15 +611,15 @@ void help() {
   w = fabs(bounds[0]-bounds[2]);
   h = fabs(bounds[1]-bounds[3]);
 
-  //scaling + fitting operations. For starters fit to standard 8.5 x 11" printer paper in landscape. 1" margin.
+  //scaling + fitting operations.
   if(widthInmm != -1.0){
     scale = widthInmm/w;
   }
 
-  materialDimensions[0] = 279.4; //printer paper width
-  materialDimensions[1] = 215.9; //printer paper height
+  materialDimensions[0] = 279.4; //available drawing width (X travel)
+  materialDimensions[1] = 215.9; //available drawing height (Y travel)
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
-  float drawSpaceHeight = materialDimensions[1]-(2*margin);
+  float drawSpaceHeight = materialDimensions[1]-(2*ymargin);
   float drawingWidth = w; //size of drawing scaled
   float drawingHeight = h;
 
@@ -536,13 +643,13 @@ void help() {
       drawingWidth = w*scale;
     }
     shiftX = margin;
-    shiftY = -(margin + drawingHeight);
+    shiftY = -(ymargin + drawingHeight);
   }
   if(centerOnMaterial == 1){
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
     shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
-    shiftY = -1*((margin + drawSpaceHeight/2) + (drawingHeight/2));
+    shiftY = -((ymargin + drawSpaceHeight/2) + (drawingHeight/2));
   }
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
@@ -565,88 +672,122 @@ seedrand((float)time(0));
  }
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
-  points = (SVGPoint*)malloc(pathCount*2*sizeof(SVGPoint));
-  cities = (int*)malloc(pathCount*2*sizeof(int));
-  paths = (ToolPath*)malloc(pointsCount*2*sizeof(ToolPath));
+  points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
+  paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
+  cities = (City*)malloc(pathCount*sizeof(City));
+
+  printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   
   npaths = 0;
-  calcPaths(points,paths,cities,&npaths);
-  printf("reorder ");
+  calcPaths(points, paths, &npaths, cities);
+  //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
+  // Cities are being properly sorted.
+
+  debug = fopen("../debug.txt", "w");
+  printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points,cities,pathCount,xy);
+    reorder(points, pathCount, xy, cities, penList);
     printf("%d... ",k);
     fflush(stdout);
   }
+  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
+  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   printf("\n");
+
   if(first) {
-    fprintf(gcode,GHEADER);
+    fprintf(gcode,GHEADER,pwr);
   }
-#ifdef G32
-  fprintf(gcode,CUTTERON,pwr);
-#endif  
+
   //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
-  for(i=0;i<pathCount;i++) {
+
+  for(i=0;i<pathCount;i++) { //equal to the number of cities.
     cityStart=1;
-    //fprintf(gcode,"New city? City start = %d\n",cityStart);
-    for(k=0;k<npaths;k++) {
-      //fprintf(stderr, "npaths = %d\n",npaths);
-      if(paths[k].city == -1){
-        //fprintf(stderr,"Paths[k],city == -1\n");
+    for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
+                            //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
+      if(paths[k].city == -1){ //means already written
 	      continue;
-      }
-      if(paths[k].city == cities[i]) {
-        //fprintf(stderr,"New city at i=%d k=%d?\n",i,k);
+      } else if(paths[k].city == cities[i].id) {
         break;
       }
     }
     if(k >= npaths-1) {
-      //printf("k > \n");
       continue;
     }
     firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
-    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY; // changed
+    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
     if(flip) {
       firsty = -firsty;
-      y = -y;
-    }
-    if(x > maxx)
+      y = -y; 
+    } if(x > maxx){
       maxx = x;
-    if(x < minx)
+    } if(x < minx){
       minx = x;
-    if(y > maxy)
+    } if(y > maxy){
       maxy = y;
-    if(y < miny)
+    } if(y < miny){
       miny = y;
-
-    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-
-#ifndef G32
-    else {
-      fprintf(gcode,"G0 X%.1f Y%.1f\n",x,y);
-      fprintf(gcode,"G4 P0\n");
     }
-#endif    
+
+    //colorCheck and tracking
+    if(cityStart ==1){
+      targetColor = cities[i].stroke.color;
+      if(targetColor != currColor) { //Detect tool slot of new color
+        for(int p = 0; p<numTools; p++){
+          if(penList[p].color == targetColor){
+            targetTool = p; 
+            break;
+          }
+          targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
+        }
+      }
+      if(targetTool != currTool){ //need to check if tool picked up previously or not
+        if(currTool >= 0){ //tool is being held
+          //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
+          //add pickup and dropoff logic
+          fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+          fprintf(gcode, "G1 Z0\n");
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
+          fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          //fprintf(gcode, "( Tool change finished )\n");
+          currTool = targetTool;
+        }
+        if(currTool == -1){ //no tool picked up
+          currColor = penList[targetTool].color;
+          //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to default color slot
+          fprintf(gcode, "G1 Z0\n");
+          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+          fprintf(gcode, "G1 X-51\n"); //slow move to pickup
+          fprintf(gcode, "G1 X0\n"); //slow move away from pickup
+          //fprintf(gcode, "( Tool change finished )\n");
+          currTool = targetTool;
+        }   
+      }      
+    }
+    
+    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y); 
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d )\n",paths[k].city);
+    fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
+    //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
     }
-#ifndef G32 
-    fprintf(gcode,CUTTERON,pwr);
-    fprintf(gcode,"G4 P0\n");
-#endif
     printed=0;
-    if(tsp) {continue;}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
       //printf("bezC %d\n",bezCount);
       first = 1;
-      if(paths[j].city == cities[i]) {
+      if(paths[j].city == cities[i].id) {
         if(doBez) { //we always do bez
             bezCount = 0;
             if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
@@ -678,116 +819,42 @@ seedrand((float)time(0));
               
               d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
               printed = 1;
-              //fprintf(stderr,"printed = 1\n");
+              //fprintf(gcode, "Line added from doBez in main: ");
               fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-              if(cityStart==1){
+              if(cityStart==1){          
                 fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
                 cityStart = 0;
-              }
-        #ifndef	  G32    
-                fprintf(gcode,"G4 P0\n");
-        #endif	      
+              }    
               bxold = bx;
               byold = by;
             }
-          } else {
-            x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-            y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-            if(flip)
-              y = -y;
-            if(x > maxx)
-              maxx = x;
-            if(x < minx)
-              minx = x;
-            if(y > maxy)
-              maxy = y;
-            if(y < miny)
-              miny = y;
-
-            if(1) {
-              if(1) {
-                printed = 1;
-                fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",x,y,feed);
-        #ifndef	 G32 
-                fprintf(gcode,"G4 P0\n");
-        #endif
-              } else {
-                ;//continue;
-                //fprintf(gcode,"G05 P%d\n",(int)(pwr*0.33));
-                //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-              }
-              first = 0;
-              xold = x;
-              yold = y;
-            } else {
-              x = (paths[j].points[0]-fabs(bounds[0]))*scale+shiftX;
-              y = (paths[j].points[1]-fabs(bounds[1]))*scale+shiftY;
-              if(flip)
-                y = -y;
-              fprintf(gcode,CUTTEROFF);
-              //fprintf(gcode,"( simplified )\n");
-              fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
-        #ifndef G32	    
-              fprintf(gcode,"G4 P0\n");
-        #endif	    
-              x = (paths[j].points[2]-fabs(bounds[0]))*scale+shiftX;
-              y = (paths[j].points[3]-fabs(bounds[1]))*scale+shiftY;
-              if(flip)
-                y = -y;
-        #ifndef	 G32  
-              fprintf(gcode,CUTTERON,pwr);
-        #endif	    
-              //fprintf(gcode,"G01 X%.4f Y%.4f  F%d\n",x,y,feed);
-              xold = x;
-              yold = y;
-            }
           }
-          paths[j].city = -1;
+          paths[j].city = -1; //this path has been written
       } else
 	        break;
     }
-    if(tsp)
-      continue;
     if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
-#ifndef G32      
-      fprintf(gcode,"G4 P0\n");
-#endif      
       printed = 1;
     }
-    if(1) { //cnc mode replacement
-      if(!printed) {
-#ifndef G32	
-	if(dwell != -1) {
-	  fprintf(gcode,"M3 S10\n");
-	  sprintf(gbuff,"G4 P%d\n",dwell);
-	  fprintf(gcode,"%s",gbuff);
-	}
-	fprintf(gcode,"M5\n");
-#endif	
-      }
-#ifndef G32      
-      fprintf(gcode,CUTTEROFF);
-#endif      
-    } else {
-      fprintf(gcode,"G1 Z%f F%d\n", ztraverse, feed);
-      fprintf(gcode,"G4 P0\n");
-      printed = 0;
-    } 
   }
-#ifndef G32  
-  if(tsp) {fprintf(gcode,CUTTEROFF);}
-#else
-  fprintf(gcode,"M5\n");
-#endif  
+  fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+  //drop off current tool
+  fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+  fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+  fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
+  fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
+  fclose(debug);
   free(points);
-  free(cities); 
   free(paths);
+  free(cities);
   nsvgDelete(g_image);
+  // printf("writeCond reached = %d\n", writeCond);
+  // printf("skipCond reached = %d\n", skipCond);
   return 0;
 }
