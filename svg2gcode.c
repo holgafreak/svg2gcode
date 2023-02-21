@@ -478,7 +478,6 @@ void help() {
   int npaths;
   int feed = 15000;
   int slowTravel = 3500;
-  int fullspeed=22000;
   int cityStart=1;
   float zFloor = -1.;
   float ztraverse = -1.;
@@ -499,7 +498,6 @@ void help() {
   int targetTool = 0; //start as 0 so no tool is matched
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
-  int nColors = 6; //assume 6 colors for now. default/undef color slot is p1. black int = -16777216
   float tol = 0.1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
@@ -589,10 +587,10 @@ void help() {
 
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
-  penList[0].color = -16776966; //default, unassigned, black color.
+  penList[0].color = -16777173; //default, unassigned, black color.
   penList[1].color = -65536;
-  penList[2].color = -14013697;
-  penList[3].color = -15066598;
+  penList[2].color = -16711936;
+  penList[3].color = -16776961;
   penList[4].color = 1;
   penList[5].color = 1;
 
@@ -762,7 +760,7 @@ seedrand((float)time(0));
         if(currTool == -1){ //no tool picked up
           currColor = penList[targetTool].color;
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
-          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to default color slot
+          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X-51 F%d\n", slowTravel); //slow move to pickup
@@ -807,17 +805,21 @@ seedrand((float)time(0));
               }
               bx = (bezPoints[l].x+zeroX)*scale+shiftX;
               by = (bezPoints[l].y+zeroY)*scale+shiftY;
-              if(flip)
+              if(flip){
                 by = -by;
-              if(bx > maxx)
+              }
+              if(bx > maxx) {
                 maxx = bx;
-              if(bx < minx)
+              }
+              if(bx < minx) {
                 minx = x;
-              if(by > maxy)
+              }
+              if(by > maxy) {
                 maxy = by;
-              if(y < miny)
+              }
+              if(y < miny){
                 miny = by;
-              
+              }
               d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
               printed = 1;
               //fprintf(gcode, "Line added from doBez in main: ");
@@ -845,7 +847,7 @@ seedrand((float)time(0));
   //drop off current tool
   fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
   fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-  fprintf(gcode, "G1 X-51\n"); //slow move to dropoff
+  fprintf(gcode, "G1 X-52\n"); //slow move to dropoff
   fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
