@@ -488,8 +488,8 @@ void help() {
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 30;
   float scale = 0.05; //make this dynamic. //this changes with widthInmm
-  float margin = 50.8; //xmargin around drawn elements in mm
-  float ymargin = 25.4; //ymargin around drawn elements in mm
+  float margin = 40; //xmargin around drawn elements in mm
+  float ymargin = 35; //ymargin around drawn elements in mm
   float materialDimensions[2];
   int fitToMaterial =  0;
   int centerOnMaterial = 1;
@@ -498,6 +498,7 @@ void help() {
   int targetTool = 0; //start as 0 so no tool is matched
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
+  float toolChangePos = -51.5;
   float tol = 1; //smaller is better
   float accuracy = 0.05; //smaller is better
   float x,y,bx,by,bxold,byold,d,firstx,firsty;
@@ -587,8 +588,8 @@ void help() {
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
   penList[0].color = -16777173; //default, unassigned, black color.
-  penList[1].color = -65536;
-  penList[2].color = -16711936;
+  penList[1].color = -16711936;
+  penList[2].color = -65536;
   penList[3].color = -16776961;
   penList[4].color = 1;
   penList[5].color = 1;
@@ -746,12 +747,12 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51.5 F%d\n", slowTravel); //slow move to dropoff
+          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to dropoff
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51.5 F2000\n"); //slow move to pickup
-          fprintf(gcode, "G1 X0 F2000\n"); //slow move away from pickup
+          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to pickup
+          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
         }
@@ -761,7 +762,7 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X-51.5 F%d\n", slowTravel); //slow move to pickup
+          fprintf(gcode, "G1 X%f F%d\n", toolChangePos, slowTravel); //slow move to pickup
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
