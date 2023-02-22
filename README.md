@@ -8,5 +8,8 @@ The paths are optimized to minimize unnecessary movements of the cutter or whate
 
 Tested on Linux, OS X and Win7. To change the inits and and other needed g-codes, just change the #defines and compile.
 No extra needed libraries.
+===================================================================================================
 
+Updated and modified by Bantam Tools with tool changing capabilites for a 6 tool rotary toolchanger on the 4th axis, 
+with scale to material and margins.
 
