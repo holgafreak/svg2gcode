@@ -635,11 +635,13 @@ void help() {
       scale = drawSpaceHeight/h;
       drawingWidth = w*scale;
       drawingHeight = h*scale;
+      printf("scale = %f \n", drawSpaceWidth);
     } else if (svgRatio >= materialRatio){ //if x is bounding or equal
       printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
       scale = drawSpaceWidth/w;
       drawingHeight = h*scale;
       drawingWidth = w*scale;
+      printf("scale = %f \n", scale);
     }
     shiftX = margin;
     shiftY = -(ymargin + drawingHeight);
@@ -717,7 +719,7 @@ seedrand((float)time(0));
     firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
     if(flip) {
       firsty = -firsty;
-      y = -y; 
+      y = -y;
     } if(x > maxx){
       maxx = x;
     } if(x < minx){
@@ -783,55 +785,50 @@ seedrand((float)time(0));
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
-      //printf("bezC %d\n",bezCount);
       first = 1;
       if(paths[j].city == cities[i].id) {
-        if(doBez) { //we always do bez
-            bezCount = 0;
-            if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3])
-              ;//continue;
-            cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
-            bxold=x;
-            byold=y;
-            for(l=0;l<bezCount;l++) {
-              if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
-                printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
-                continue;
-              }
-              if(bezPoints[l].y > bounds[3]) {
-                printf("bezPoints y %d\n",l);
-                continue;
-              }
-              bx = (bezPoints[l].x+zeroX)*scale+shiftX;
-              by = (bezPoints[l].y+zeroY)*scale+shiftY;
-              if(flip){
-                by = -by;
-              }
-              if(bx > maxx) {
-                maxx = bx;
-              }
-              if(bx < minx) {
-                minx = x;
-              }
-              if(by > maxy) {
-                maxy = by;
-              }
-              if(y < miny){
-                miny = by;
-              }
-              d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
-              printed = 1;
-              //fprintf(gcode, "Line added from doBez in main: ");
-              fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-              if(cityStart==1){          
-                fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
-                cityStart = 0;
-              }    
-              bxold = bx;
-              byold = by;
-            }
+        bezCount = 0;
+          //if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) ;continue;
+        cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
+        bxold=x;
+        byold=y;
+        for(l=0;l<bezCount;l++) {
+          if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
+            printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
+            continue;
           }
-          paths[j].city = -1; //this path has been written
+          if(bezPoints[l].y > bounds[3]) {
+            printf("bezPoints y %d\n",l);
+            continue;
+          }
+          bx = (bezPoints[l].x+zeroX)*scale+shiftX;
+          by = (bezPoints[l].y+zeroY)*scale+shiftY;
+          if(flip){
+             by = -by;
+          }
+          if(bx > maxx) {
+            maxx = bx;
+          }
+          if(bx < minx) {
+            minx = x;
+          }
+          if(by > maxy) {
+            maxy = by;
+          }
+          if(y < miny){
+            miny = by;
+          }
+          d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
+          printed = 1;
+          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
+          if(cityStart==1){          
+            fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+            cityStart = 0;
+          }    
+          bxold = bx;
+          byold = by;
+        }
+      paths[j].city = -1; //this path has been written
       } else
 	        break;
     }
@@ -846,7 +843,7 @@ seedrand((float)time(0));
   //drop off current tool
   fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
   fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-  fprintf(gcode, "G1 X-51.5\n"); //slow move to dropoff
+  fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
   fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
