@@ -697,7 +697,6 @@ seedrand((float)time(0));
     fprintf(gcode,GHEADER,pwr);
   }
 
-  //Being looping through shapes and paths for writing to output.
   k=0;
   i=0;
 
