@@ -516,6 +516,7 @@ void help() {
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
   float shiftY = 0;
+  float yMountOffset = 0; //mm
   float zeroX = 0.;
   float zeroY = 0.;
   FILE *gcode;
@@ -584,13 +585,12 @@ void help() {
     return -1;
   }
 
-
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
-  penList[0].color = -16777173; //default, unassigned, black color.
+  penList[0].color = -16776966; //default, unassigned, black color.
   penList[1].color = -16711936;
-  penList[2].color = -65536;
-  penList[3].color = -16776961;
+  penList[2].color = -784384;
+  penList[3].color = 1;
   penList[4].color = 1;
   penList[5].color = 1;
 
@@ -644,14 +644,15 @@ void help() {
       printf("scale = %f \n", scale);
     }
     shiftX = margin;
-    shiftY = -(ymargin + drawingHeight);
+    shiftY = -(ymargin + drawingHeight + yMountOffset);
   }
-  if(centerOnMaterial == 1){
+  if(centerOnMaterial == 1){ //rethink for based on x or y bound
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
     shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
-    shiftY = -((ymargin + drawSpaceHeight/2) + (drawingHeight/2));
+    shiftY = -((ymargin + drawSpaceHeight/2) + (drawingHeight/2) + yMountOffset);
   }
+  printf("ShiftX:%f, ShiftY:%f\n", shiftX, shiftY);
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
   fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
@@ -691,6 +692,10 @@ seedrand((float)time(0));
 
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   mergeSort(cities, 0, pathCount-1); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+
+  // for(i = 0; i<pathCount; i++){
+  //   printf("City %d at i:%d, Color:%d\n", cities[i].id, i, cities[i].stroke.color);
+  // }
 
   printf("\n");
   if(first) {
@@ -773,7 +778,7 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y); 
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d, color %d)\n", paths[k].city, cities[paths[k].city].stroke.color); 
+    //fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color); 
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
@@ -818,6 +823,7 @@ seedrand((float)time(0));
           }
           d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
           printed = 1;
+          //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
           if(cityStart==1){          
             fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
