@@ -210,7 +210,10 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   j=0;
   p=0;
   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
-     for(path = shape->paths; path != NULL; path=path->next) {
+    for(path = shape->paths; path != NULL; path=path->next) {
+      cities[i].id = i;
+      cities[i].stroke = shape->stroke;
+      //printf("City number %d color = %d\n", i, (shape->stroke.color));
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
         if(j==0) {//add first two points. this is for lines and not bezier paths.
@@ -258,9 +261,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #endif
 	 exit(-1);
        }
-       cities[i].id = i;
-       cities[i].stroke = shape->stroke;
-       //printf("City number %d color = %d\n", i, (shape->stroke.color));
        i++; //setting up cities
      }
      j++;
@@ -476,7 +476,7 @@ void help() {
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
   int numTools = 6;
   int npaths;
-  int feed = 15000;
+  int feed = 13000;
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = -1.;
@@ -678,11 +678,8 @@ seedrand((float)time(0));
   cities = (City*)malloc(pathCount*sizeof(City));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
-  
   npaths = 0;
   calcPaths(points, paths, &npaths, cities);
-  //qsort(cities, pathCount, sizeof(City), colorComp); qsort is unstable which we do not want
-  // Cities are being properly sorted.
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
@@ -690,10 +687,12 @@ seedrand((float)time(0));
     printf("%d... ",k);
     fflush(stdout);
   }
-  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
-  mergeSort(cities, 0, pathCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   printf("\n");
 
+  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
+  mergeSort(cities, 0, pathCount-1); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+
+  printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
   }
