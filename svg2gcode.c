@@ -463,9 +463,10 @@ void help() {
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-T engrave only TSP-path\n");
   printf("\t-V optmize for Voronoi Stipples\n");
-  printf("\t-h this help\n");}
+  printf("\t-h this help\n");
+  }
   
-  int main(int argc, char* argv[]) {
+int generateGcode(int argc, char* argv[]) {
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
@@ -526,6 +527,9 @@ void help() {
   char gbuff[128];
   printf("v0.0001 8.11.2020\n");
   //seed48(NULL);
+
+  printf("Argc:%d\n", argc);
+
   if(argc < 3) {
     help();
     return -1;
@@ -577,6 +581,7 @@ void help() {
       break;
     }
   }
+  //move above to main
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   g_image = nsvgParseFromFile(argv[optind],"px",96);
@@ -859,4 +864,9 @@ seedrand((float)time(0));
   // printf("writeCond reached = %d\n", writeCond);
   // printf("skipCond reached = %d\n", skipCond);
   return 0;
+}
+
+int main(int argc, char* argv[]){
+  printf("Argc:%d\n", argc);
+  return generateGcode(argc, argv);
 }
