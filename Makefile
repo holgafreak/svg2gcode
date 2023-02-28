@@ -1,6 +1,6 @@
 CC = clang
 GCC = xtensa-esp32s3-elf-gcc
-CFLAGS = -Ofast -v
+CFLAGS = -Ofast -v -mlongcalls
 
 tool: svg2gcode
 
