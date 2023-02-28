@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include "svg2gcode.h"
 //#define TESTRNG // remove if on linux or osx
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
