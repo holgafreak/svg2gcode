@@ -711,7 +711,7 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 	}
 	if (stops == NULL) return NULL;
 
-	grad = (NSVGgradient*)malloc(sizeof(NSVGgradient) + sizeof(NSVGgradientStop)*(nstops-1));
+    grad = (NSVGgradient*)malloc(sizeof(NSVGgradient) + sizeof(NSVGgradientStop)*(nstops-1));
 	if (grad == NULL) return NULL;
 
 	// TODO: handle data->units == NSVG_OBJECT_SPACE.
@@ -2532,19 +2532,35 @@ NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
 	fseek(fp, 0, SEEK_END);
 	size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
-	data = (char*)malloc(size+1);
+#ifdef USE_MEMUTIL
+printf("parsedata malloc\n");
+    data = (char*)memutil_malloc(size+1);
+	if (data == NULL) goto error;
+	memutil_fread(data, size, 1, fp);  // Automatically null terminated
+#else
+    data = (char*)malloc(size+1);
 	if (data == NULL) goto error;
 	fread(data, size, 1, fp);
 	data[size] = '\0';	// Must be null terminated.
+#endif
 	fclose(fp);
 	image = nsvgParse(data, units, dpi);
+#ifdef USE_MEMUTIL
+	memutil_free(data);
+#else
 	free(data);
+#endif
 
 	return image;
 
 error:
+
 	if (fp) fclose(fp);
+#ifdef USE_MEMUTIL
+	if (data) memutil_free(data);
+#else
 	if (data) free(data);
+#endif
 	if (image) nsvgDelete(image);
 	return NULL;
 }
