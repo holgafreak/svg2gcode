@@ -247,6 +247,7 @@ static void nsvg__parseElement(char* s,
 	if (*s) { 
 #ifdef USE_MEMUTIL
         memutil_write_char(s++, '\0');
+        memutil_write_flush();
 #else
         *s++ = '\0'; 
 #endif
@@ -267,6 +268,7 @@ static void nsvg__parseElement(char* s,
 	    if (*s) { 
 #ifdef USE_MEMUTIL
             memutil_write_char(s++, '\0');
+            memutil_write_flush();
 #else
             *s++ = '\0'; 
 #endif
@@ -282,6 +284,7 @@ static void nsvg__parseElement(char* s,
 	    if (*s) { 
 #ifdef USE_MEMUTIL
             memutil_write_char(s++, '\0');
+            memutil_write_flush();
 #else
             *s++ = '\0'; 
 #endif
@@ -314,6 +317,7 @@ int nsvg__parseXML(char* input,
 			// Start of a tag
 #ifdef USE_MEMUTIL
 			memutil_write_char(s++, '\0');
+            memutil_write_flush();
 #else
 			*s++ = '\0';
 #endif
@@ -324,6 +328,7 @@ int nsvg__parseXML(char* input,
 			// Start of a content or new tag.
 #ifdef USE_MEMUTIL
 			memutil_write_char(s++, '\0');
+            memutil_write_flush();
 #else
 			*s++ = '\0';
 #endif
