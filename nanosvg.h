@@ -240,7 +240,14 @@ static void nsvg__parseElement(char* s,
 	// Get tag name
 	name = s;
 	while (*s && !nsvg__isspace(*s)) s++;
-	if (*s) { *s++ = '\0'; }
+	if (*s) { 
+#ifdef USE_MEMUTIL
+        memutil_write_char(s, '\0');
+        s++;
+#else
+        *s++ = '\0'; 
+#endif
+    }
 
 	// Get attribs
 	while (!end && *s && nattr < NSVG_XML_MAX_ATTRIBS-3) {
@@ -254,7 +261,14 @@ static void nsvg__parseElement(char* s,
 		attr[nattr++] = s;
 		// Find end of the attrib name.
 		while (*s && !nsvg__isspace(*s) && *s != '=') s++;
-		if (*s) { *s++ = '\0'; }
+	    if (*s) { 
+#ifdef USE_MEMUTIL
+            memutil_write_char(s, '\0');
+            s++;
+#else
+            *s++ = '\0'; 
+#endif
+        }
 		// Skip until the beginning of the value.
 		while (*s && *s != '\"' && *s != '\'') s++;
 		if (!*s) break;
@@ -263,7 +277,14 @@ static void nsvg__parseElement(char* s,
 		// Store value and find the end of it.
 		attr[nattr++] = s;
 		while (*s && *s != quote) s++;
-		if (*s) { *s++ = '\0'; }
+	    if (*s) { 
+#ifdef USE_MEMUTIL
+            memutil_write_char(s, '\0');
+            s++;
+#else
+            *s++ = '\0'; 
+#endif
+        }
 	}
 	
 	// List terminator
@@ -286,16 +307,27 @@ int nsvg__parseXML(char* input,
 	char* s = input;
 	char* mark = s;
 	int state = NSVG_XML_CONTENT;
+    
 	while (*s) {
 		if (*s == '<' && state == NSVG_XML_CONTENT) {
 			// Start of a tag
+#ifdef USE_MEMUTIL
+			memutil_write_char(s, '\0');
+            s++;
+#else
 			*s++ = '\0';
-			nsvg__parseContent(mark, contentCb, ud);
+#endif
+            nsvg__parseContent(mark, contentCb, ud);
 			mark = s;
 			state = NSVG_XML_TAG;
 		} else if (*s == '>' && state == NSVG_XML_TAG) {
 			// Start of a content or new tag.
+#ifdef USE_MEMUTIL
+			memutil_write_char(s, '\0');
+            s++;
+#else
 			*s++ = '\0';
+#endif
 			nsvg__parseElement(mark, startelCb, endelCb, ud);
 			mark = s;
 			state = NSVG_XML_CONTENT;
