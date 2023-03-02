@@ -73,6 +73,15 @@ extern "C" {
 	nsvgDelete(image);
 */
 
+// Memory access macros
+#ifdef MEMUTIL
+#define MWR(x, y)   memutil_write_char(x++, y);
+#define MRD(x, y)
+#else
+#define MWR(x, y)  *x++ = y;
+#define MRD(x, y)
+#endif
+
 #define NSVG_PAINT_NONE 0
 #define NSVG_PAINT_COLOR 1
 #define NSVG_PAINT_LINEAR_GRADIENT 2
@@ -245,12 +254,7 @@ static void nsvg__parseElement(char* s,
 	name = s;
 	while (*s && !nsvg__isspace(*s)) s++;
 	if (*s) { 
-#ifdef USE_MEMUTIL
-        memutil_write_char(s++, '\0');
-        memutil_write_flush();
-#else
-        *s++ = '\0'; 
-#endif
+        MWR(s, '\0');
     }
 
 	// Get attribs
@@ -266,12 +270,7 @@ static void nsvg__parseElement(char* s,
 		// Find end of the attrib name.
 		while (*s && !nsvg__isspace(*s) && *s != '=') s++;
 	    if (*s) { 
-#ifdef USE_MEMUTIL
-            memutil_write_char(s++, '\0');
-            memutil_write_flush();
-#else
-            *s++ = '\0'; 
-#endif
+            MWR(s, '\0');
         }
 		// Skip until the beginning of the value.
 		while (*s && *s != '\"' && *s != '\'') s++;
@@ -282,12 +281,7 @@ static void nsvg__parseElement(char* s,
 		attr[nattr++] = s;
 		while (*s && *s != quote) s++;
 	    if (*s) { 
-#ifdef USE_MEMUTIL
-            memutil_write_char(s++, '\0');
-            memutil_write_flush();
-#else
-            *s++ = '\0'; 
-#endif
+            MWR(s, '\0');
         }
 	}
 	
@@ -315,23 +309,13 @@ int nsvg__parseXML(char* input,
 	while (*s) {
 		if (*s == '<' && state == NSVG_XML_CONTENT) {
 			// Start of a tag
-#ifdef USE_MEMUTIL
-			memutil_write_char(s++, '\0');
-            memutil_write_flush();
-#else
-			*s++ = '\0';
-#endif
+            MWR(s, '\0');
             nsvg__parseContent(mark, contentCb, ud);
 			mark = s;
 			state = NSVG_XML_TAG;
 		} else if (*s == '>' && state == NSVG_XML_TAG) {
 			// Start of a content or new tag.
-#ifdef USE_MEMUTIL
-			memutil_write_char(s++, '\0');
-            memutil_write_flush();
-#else
-			*s++ = '\0';
-#endif
+            MWR(s, '\0');
 			nsvg__parseElement(mark, startelCb, endelCb, ud);
 			mark = s;
 			state = NSVG_XML_CONTENT;
