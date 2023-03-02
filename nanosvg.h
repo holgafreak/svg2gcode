@@ -33,6 +33,10 @@
 extern "C" {
 #endif
 
+#ifdef USE_MEMUTIL
+#include "memutil.h"
+#endif
+
 // NanoSVG is a simple stupid single-header-file SVG parse. The output of the parser is a list of cubic bezier shapes.
 //
 // The library suits well for anything from rendering scalable icons in your editor application to prototyping a game.
@@ -242,8 +246,7 @@ static void nsvg__parseElement(char* s,
 	while (*s && !nsvg__isspace(*s)) s++;
 	if (*s) { 
 #ifdef USE_MEMUTIL
-        memutil_write_char(s, '\0');
-        s++;
+        memutil_write_char(s++, '\0');
 #else
         *s++ = '\0'; 
 #endif
@@ -263,8 +266,7 @@ static void nsvg__parseElement(char* s,
 		while (*s && !nsvg__isspace(*s) && *s != '=') s++;
 	    if (*s) { 
 #ifdef USE_MEMUTIL
-            memutil_write_char(s, '\0');
-            s++;
+            memutil_write_char(s++, '\0');
 #else
             *s++ = '\0'; 
 #endif
@@ -279,8 +281,7 @@ static void nsvg__parseElement(char* s,
 		while (*s && *s != quote) s++;
 	    if (*s) { 
 #ifdef USE_MEMUTIL
-            memutil_write_char(s, '\0');
-            s++;
+            memutil_write_char(s++, '\0');
 #else
             *s++ = '\0'; 
 #endif
@@ -312,8 +313,7 @@ int nsvg__parseXML(char* input,
 		if (*s == '<' && state == NSVG_XML_CONTENT) {
 			// Start of a tag
 #ifdef USE_MEMUTIL
-			memutil_write_char(s, '\0');
-            s++;
+			memutil_write_char(s++, '\0');
 #else
 			*s++ = '\0';
 #endif
@@ -323,8 +323,7 @@ int nsvg__parseXML(char* input,
 		} else if (*s == '>' && state == NSVG_XML_TAG) {
 			// Start of a content or new tag.
 #ifdef USE_MEMUTIL
-			memutil_write_char(s, '\0');
-            s++;
+			memutil_write_char(s++, '\0');
 #else
 			*s++ = '\0';
 #endif
@@ -2565,7 +2564,6 @@ NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
 	size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
 #ifdef USE_MEMUTIL
-printf("parsedata malloc\n");
     data = (char*)memutil_malloc(size+1);
 	if (data == NULL) goto error;
 	memutil_fread(data, size, 1, fp);  // Automatically null terminated
@@ -2578,6 +2576,7 @@ printf("parsedata malloc\n");
 	fclose(fp);
 	image = nsvgParse(data, units, dpi);
 #ifdef USE_MEMUTIL
+    memutil_write_flush();  // Make sure no data left to be written to memory
 	memutil_free(data);
 #else
 	free(data);
