@@ -281,6 +281,8 @@ void merge(City * arr, int left, int mid, int right) {
 
     City *leftArr = (City *) malloc(n1 * sizeof(City));
     City *rightArr = (City *) malloc(n2 * sizeof(City));
+    memset(leftArr, 0, n1 * sizeof(City));
+    memset(rightArr, 0, n2 * sizeof(City));
 
     for (int i = 0; i < n1; i++) {
         leftArr[i] = arr[left + i];
@@ -684,6 +686,9 @@ seedrand((float)time(0));
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   cities = (City*)malloc(pathCount*sizeof(City));
+  memset(points, 0, pathCount*sizeof(SVGPoint));
+  memset(paths, 0, pointsCount*sizeof(ToolPath));
+  memset(cities, 0, pathCount*sizeof(City));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   npaths = 0;
@@ -863,6 +868,7 @@ seedrand((float)time(0));
   free(paths);
   free(cities);
   nsvgDelete(g_image);
+  free(penList);
   // printf("writeCond reached = %d\n", writeCond);
   // printf("skipCond reached = %d\n", skipCond);
   return 0;
