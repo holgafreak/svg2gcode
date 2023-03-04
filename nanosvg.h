@@ -2011,8 +2011,8 @@ static void nsvg__parseRect(NSVGparser* p, const char** attr)
 	float ry = -1.0f;
 	int i;
 	
-	for (i = 0; (attr[i]); i += 2) {
-		if (!nsvg__parseAttr(p, (attr[i]), (attr[i + 1]))) {
+	for (i = 0; MRDS(attr[i]); i += 2) {
+		if (!nsvg__parseAttr(p, MRDS(attr[i]), MRDS(attr[i + 1]))) {
 			if (strcmp(MRDS(attr[i]), "x") == 0) x = nsvg__parseFloat(p, MRDS(attr[i+1]), 0);
 			if (strcmp(MRDS(attr[i]), "y") == 0) y = nsvg__parseFloat(p, MRDS(attr[i+1]), 1);
 			if (strcmp(MRDS(attr[i]), "width") == 0) w = nsvg__parseFloat(p, MRDS(attr[i+1]), 0);
@@ -2094,8 +2094,8 @@ static void nsvg__parseEllipse(NSVGparser* p, const char** attr)
 	float ry = 0.0f;
 	int i;
 	
-	for (i = 0; (attr[i]); i += 2) {
-		if (!nsvg__parseAttr(p, (attr[i]), (attr[i + 1]))) {
+	for (i = 0; MRDS(attr[i]); i += 2) {
+		if (!nsvg__parseAttr(p, MRDS(attr[i]), MRDS(attr[i + 1]))) {
 			if (strcmp(MRDS(attr[i]), "cx") == 0) cx = nsvg__parseFloat(p, MRDS(attr[i+1]), 0);
 			if (strcmp(MRDS(attr[i]), "cy") == 0) cy = nsvg__parseFloat(p, MRDS(attr[i+1]), 1);
 			if (strcmp(MRDS(attr[i]), "rx") == 0) rx = fabsf(nsvg__parseFloat(p, MRDS(attr[i+1]), 0));
@@ -2127,8 +2127,8 @@ static void nsvg__parseLine(NSVGparser* p, const char** attr)
 	float y2 = 0.0;
 	int i;
 	
-	for (i = 0; (attr[i]); i += 2) {
-		if (!nsvg__parseAttr(p, (attr[i]), (attr[i + 1]))) {
+	for (i = 0; MRDS(attr[i]); i += 2) {
+		if (!nsvg__parseAttr(p, MRDS(attr[i]), MRDS(attr[i + 1]))) {
 			if (strcmp(MRDS(attr[i]), "x1") == 0) x1 = nsvg__parseFloat(p, MRDS(attr[i + 1]), 0);
 			if (strcmp(MRDS(attr[i]), "y1") == 0) y1 = nsvg__parseFloat(p, MRDS(attr[i + 1]), 1);
 			if (strcmp(MRDS(attr[i]), "x2") == 0) x2 = nsvg__parseFloat(p, MRDS(attr[i + 1]), 0);

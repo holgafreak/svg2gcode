@@ -593,6 +593,7 @@ int generateGcode(int argc, char* argv[]) {
 
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
+  memset(penList, 0, numTools*sizeof(Pen));
   penList[0].color = -16776966; //default, unassigned, black color.
   penList[1].color = -16711936;
   penList[2].color = -784384;
