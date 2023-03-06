@@ -79,15 +79,11 @@ extern "C" {
 #define MWRP(x, y)          memutil_write_char(x++, y);
 #define MRDC(x)             memutil_read_char(x)
 #define MRDS(x)             memutil_read_str(x)
-#define MSTRNCPY(x, y, n)   for (int i = 0; i < n; i++) {                               \
-                               memutil_write_char((x + i), memutil_read_char(y + i));   \
-                            }
 #else
 #define MWR(x, y)           x = y;
 #define MWRP(x, y)          *x++ = y;
 #define MRDC(x)             *x
 #define MRDS(x)             x
-#define MSTRNCPY(x, y, z)   strncpy(x, y, z);
 #endif
 
 #define NSVG_PAINT_NONE 0
@@ -259,7 +255,7 @@ static void nsvg__parseElement(char* s,
 		return;
 
 	// Get tag name
-	name = MRDS(s);
+	name = s;
 	while (MRDC(s) && !nsvg__isspace(MRDC(s))) s++;
 	if (MRDC(s)) { 
         MWRP(s, '\0');
@@ -274,7 +270,7 @@ static void nsvg__parseElement(char* s,
 			end = 1;
 			break;
 		}
-		attr[nattr++] = MRDS(s);
+		attr[nattr++] = s;
 		// Find end of the attrib name.
 		while (MRDC(s) && !nsvg__isspace(MRDC(s)) && MRDC(s) != '=') s++;
 	    if (MRDC(s)) { 
@@ -287,7 +283,7 @@ static void nsvg__parseElement(char* s,
 		s++;
 		// Store value and find the end of it.
 		attr[nattr++] = MRDS(s);
-		while (MRDC(s) && MRDC(s) != quote) s++;
+		while (MRDC(s) && MRDC(s) != MRDC(&quote)) s++;
 	    if (MRDC(s)) { 
             MWRP(s, '\0');
         }
@@ -299,9 +295,9 @@ static void nsvg__parseElement(char* s,
 
 	// Call callbacks.
 	if (start && startelCb)
-		(*startelCb)(ud, MRDS(name), attr);
+		(*startelCb)(ud, name, attr);
 	if (end && endelCb)
-		(*endelCb)(ud, MRDS(name));
+		(*endelCb)(ud, name);
 }
 
 int nsvg__parseXML(char* input,
@@ -706,6 +702,7 @@ static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
 	NSVGgradientData* grad = p->gradients;
 	while (grad) {
+        printf("1: %c vs %c\r\n", grad->id, MRDS(grad->id));
 		if (strcmp(MRDS(grad->id), MRDS(id)) == 0)
 			return grad;
 		grad = grad->next;
@@ -910,7 +907,14 @@ error:
 static const char* nsvg__getNextPathItem(const char* s, char* it)
 {
 	int i = 0;
+    printf("BEFORE: %c\r\n", it[0]);
 	MWR(it[0], '\0');
+    printf("AFTER: ");
+    if (!it[0]) {
+        printf("NULL\r\n");
+    } else {
+        printf("%c\r\n", it[0]);
+    }
 	// Skip white spaces and commas
 	while (MRDC(s) && (nsvg__isspace(MRDC(s)) || MRDC(s) == ',')) s++;
 	if (!MRDC(s)) return s;
@@ -1003,7 +1007,7 @@ static unsigned int nsvg__parseColorRGB(const char* str)
 	int r = -1, g = -1, b = -1;
 	char s1[32]="", s2[32]="";
 	sscanf(MRDS(str + 4), "%d%[%%, \t]%d%[%%, \t]%d", &r, s1, &g, s2, &b);
-	if (strchr(s1, '%')) {
+	if (strchr(MRDS(s1), '%')) {
 		return NSVG_RGB((r*255)/100,(g*255)/100,(b*255)/100);
 	} else {
 		return NSVG_RGB(r,g,b);
@@ -1264,7 +1268,7 @@ static int nsvg__parseTransformArgs(const char* str, float* args, int maxNa, int
 	const char* ptr;
 	
 	*na = 0;
-	ptr = MRDS(str);
+	ptr = str;
 	while (MRDC(ptr) && MRDC(ptr) != '(') ++ptr;
 	if (MRDC(ptr) == 0)
 		return 1;
@@ -1479,10 +1483,10 @@ static int nsvg__parseNameValue(NSVGparser* p, const char* start, const char* en
 	char value[512];
 	int n;
 	
-	str = MRDS(start);
+	str = start;
 	while (str < end && MRDC(str) != ':') ++str;
 	
-	val = MRDS(str);
+	val = str;
 	
 	// Right Trim
 	while (str > start &&  (MRDC(str) == ':' || nsvg__isspace(MRDC(str)))) --str;
@@ -1497,10 +1501,10 @@ static int nsvg__parseNameValue(NSVGparser* p, const char* start, const char* en
 	
 	n = (int)(end - val);
 	if (n > 511) n = 511;
-	if (n) memcpy(MRDS(value), MRDS(val), n);
+	if (n) memcpy(value, MRDS(val), n);
 	value[n] = 0;
 	
-	return nsvg__parseAttr(p, MRDS(name), MRDS(value));
+	return nsvg__parseAttr(p, name, value);
 }
 
 static void nsvg__parseStyle(NSVGparser* p, const char* str)
@@ -1511,9 +1515,9 @@ static void nsvg__parseStyle(NSVGparser* p, const char* str)
 	while (MRDC(str)) {
 		// Left Trim
 		while(MRDC(str) && nsvg__isspace(MRDC(str))) ++str;
-		start = MRDS(str);
+		start = str;
 		while(MRDC(str) && MRDC(str) != ';') ++str;
-		end = MRDS(str);
+		end = str;
 		
 		// Right Trim
 		while (end > start &&  (MRDC(end) == ';' || nsvg__isspace(MRDC(end)))) --end;
@@ -2269,13 +2273,26 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 				else if (strcmp(MRDS(attr[i+1]), "repeat") == 0)
 					grad->spread = NSVG_SPREAD_REPEAT;
 			} else if (strcmp(MRDS(attr[i]), "xlink:href") == 0) {
-                MSTRNCPY(grad->ref, attr[i+1], 63);
+                strncpy(grad->ref, MRDS(attr[i+1]), 63);
                 temp = MRDC(&grad->ref[63]);
+                printf("parseGradient ref; BEFORE: %c\r\n", grad->ref[63]);
 				MWR(temp, '\0');
+                printf("AFTER: ");
+                if (!grad->ref[63]) {
+                    printf("NULL\r\n");
+                } else {
+                    printf("%c\r\n", grad->ref[63]);
+                }
 			} else if (strcmp(MRDS(attr[i]), "id") == 0) {
-                MSTRNCPY(grad->id, attr[i+1], 63);
+                strncpy(grad->id, MRDS(attr[i+1]), 63);
                 temp = MRDC(&grad->id[63]);
+                printf("parseGradient id; BEFORE: %c\r\n", grad->id[63]);
 				MWR(temp, '\0');
+                if (!grad->id[63]) {
+                    printf("NULL\r\n");
+                } else {
+                    printf("%c\r\n", grad->id[63]);
+                }
 			}
 		}
 	}
