@@ -2,6 +2,6 @@
 #define SVG2GCODE_H
 
 // Function prototypes
-int generateGcode(int, char**);
+int generateGcode(int, char**, int*);
 
 #endif

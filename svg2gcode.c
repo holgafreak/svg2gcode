@@ -473,7 +473,7 @@ void help() {
   printf("\t-h this help\n");
   }
   
-int generateGcode(int argc, char* argv[]) {
+int generateGcode(int argc, char* argv[], int* penColors) {
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
@@ -600,15 +600,13 @@ int generateGcode(int argc, char* argv[]) {
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
   memset(penList, 0, numTools*sizeof(Pen));
-  penList[0].color = -16776966; //default, unassigned, black color.
-  penList[1].color = -16711936;
-  penList[2].color = -784384;
-  penList[3].color = 1;
-  penList[4].color = 1;
-  penList[5].color = 1;
+  //assign pen colors for penColors input
+  for(int i = 0; i<numTools;i++){
+    printf("Tool %d in penColors color: %d\n", i, penColors[i]);
+    penList[i].color = penColors[i];
+  }
 
   calcBounds(g_image, numTools, penList);
-
   printf("Color counts:\n");
   for(int c = 0; c<numTools;c++){
     printf("\tp%d=%d\n",c,penList[c].count);
@@ -883,5 +881,6 @@ seedrand((float)time(0));
 
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  return generateGcode(argc, argv);
+  int penColors[6] = {-16776966, -16711936, -784384, 1, 1, 1};
+  return generateGcode(argc, argv, penColors);
 }
