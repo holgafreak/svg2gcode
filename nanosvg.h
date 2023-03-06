@@ -907,14 +907,7 @@ error:
 static const char* nsvg__getNextPathItem(const char* s, char* it)
 {
 	int i = 0;
-    printf("BEFORE: %c\r\n", it[0]);
 	MWR(it[0], '\0');
-    printf("AFTER: ");
-    if (!it[0]) {
-        printf("NULL\r\n");
-    } else {
-        printf("%c\r\n", it[0]);
-    }
 	// Skip white spaces and commas
 	while (MRDC(s) && (nsvg__isspace(MRDC(s)) || MRDC(s) == ',')) s++;
 	if (!MRDC(s)) return s;
