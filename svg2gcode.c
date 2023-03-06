@@ -320,13 +320,17 @@ void merge(City * arr, int left, int mid, int right) {
 }
 
 //sub array implementation of merge sort for sorting cities by color
-void mergeSort(City * arr, int left, int right) {
-    if (left < right) {
-        int mid = left + (right - left) / 2;
-        mergeSort(arr, left, mid);
-        mergeSort(arr, mid + 1, right);
-        merge(arr, left, mid, right);
-    }
+void mergeSort(City * arr, int left, int right, int level, int* mergeLevel) {
+  if(level > *mergeLevel){
+    printf("Merge Sort level: %d\n", level);
+    *mergeLevel = level;
+  }
+  if (left < right) {
+    int mid = left + (right - left) / 2;
+    mergeSort(arr, left, mid, level+1, mergeLevel);
+    mergeSort(arr, mid + 1, right, level+1, mergeLevel);
+    merge(arr, left, mid, right);
+  }
 }
 
 //calculate the svg space bounds for the image and create initial city sized list of colors.
@@ -703,7 +707,10 @@ seedrand((float)time(0));
   printf("\n");
 
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
-  mergeSort(cities, 0, pathCount-1); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  printf("Sorting cities by color\n");
+  int mergeCount = 0;
+  int* mergeLevel = &mergeCount;
+  mergeSort(cities, 0, pathCount-1, 0, mergeLevel); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
 
   // for(i = 0; i<pathCount; i++){
   //   printf("City %d at i:%d, Color:%d\n", cities[i].id, i, cities[i].stroke.color);
