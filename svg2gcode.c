@@ -1,4 +1,4 @@
-/*  
+/*
  * svg2gcode (c) Matti Koskinen 2014
  *
  * reorder-function based on StippleGen
@@ -7,8 +7,8 @@
  * nanosvg.h (c) 2014 Mikko Mononen
  * some routines based on nanosvg-master example1.c
  *
- * Xgetopt used on VS2010 (or later) by Hans Dietrich,David Smith 
- * code public domain 
+ * Xgetopt used on VS2010 (or later) by Hans Dietrich,David Smith
+ * code public domain
  *
  * No comments :-)
  *
@@ -16,14 +16,14 @@
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * http://creativecommons.org/licenses/LGPL/2.1/
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -41,7 +41,12 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
+
+//efine EMBEDDED
+#ifdef EMBEDDED
 #include "svg2gcode.h"
+#endif
+
 //#define TESTRNG // remove if on linux or osx
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
@@ -110,8 +115,8 @@ static void seedrand(float seedval) {
   else {
       seed = ((seed - 1L) % 0x7FFFFFFEL) + 1L;
     }
-    seed = rand31(seed);
-    seed = rand31(seed);
+    seed = rand31();
+    seed = rand31();
 }
 
 static double drnd31() {
@@ -142,12 +147,12 @@ static float distPtSeg(float x, float y, float px, float py, float qx, float qy)
 }
 // bezier smoothing
 static void cubicBez(float x1, float y1, float x2, float y2,
-		     float x3, float y3, float x4, float y4,
-		     float tol, int level)
+             float x3, float y3, float x4, float y4,
+             float tol, int level)
 {
   float x12,y12,x23,y23,x34,y34,x123,y123,x234,y234,x1234,y1234;
   float d;
-	
+
   if (level > 12) return;
 
   x12 = (x1+x2)*0.5f;
@@ -165,8 +170,8 @@ static void cubicBez(float x1, float y1, float x2, float y2,
 
   d = distPtSeg(x1234, y1234, x1,y1, x4,y4);
   if (d > tol*tol) {
-    cubicBez(x1,y1, x12,y12, x123,y123, x1234,y1234, tol, level+1); 
-    cubicBez(x1234,y1234, x234,y234, x34,y34, x4,y4, tol, level+1); 
+    cubicBez(x1,y1, x12,y12, x123,y123, x1234,y1234, tol, level+1);
+    cubicBez(x1234,y1234, x234,y234, x34,y34, x4,y4, tol, level+1);
   } else {
     bezPoints[bezCount].x = x4;
     bezPoints[bezCount].y = y4;
@@ -201,7 +206,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   FILE *f;
   int i,j,k,l,p,b,bezCount;
   SVGPoint* pts;
-#ifdef DO_HPGL 
+#ifdef DO_HPGL
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
 #endif
@@ -223,11 +228,11 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
 #ifdef DO_HPGL
         fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
         fflush(f);
-	      } else {
+          } else {
         fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
         fflush(f);
 #endif
-	      }
+          }
         if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
@@ -244,23 +249,23 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
         paths[k].city = i; //assign points in this path/shape to city i.
         k++;
        }
-     cont:       
+     cont:
        if(k>pointsCount) {
-	 printf("error k > \n");
+     printf("error k > \n");
 #ifdef DO_HPGL
-	 fprintf(f,"PU0,0;\n");
-	 fclose(f);
+     fprintf(f,"PU0,0;\n");
+     fclose(f);
 #endif
-	 *npaths = 0;
-	 return;
+     *npaths = 0;
+     return;
        }
        if(i>pathCount) {
-	 printf("error i > \n");
+     printf("error i > \n");
 #ifdef DO_HPGL
-	 fprintf(f,"PU0,0;\n");
-	 fclose(f);
+     fprintf(f,"PU0,0;\n");
+     fclose(f);
 #endif
-	 exit(-1);
+     exit(-1);
        }
        i++; //setting up cities
      }
@@ -355,7 +360,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
         bounds[1] = minf(bounds[1], p[1]);
         bounds[2] = maxf(bounds[2], p[0]);
         bounds[3] = maxf(bounds[3], p[1]);
-	      pointsCount++;
+          pointsCount++;
       }
       pathCount++;
           }
@@ -379,7 +384,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
 }
 
 //sort array by color defined int.
-int colorComp(const void * a, const void * b) {
+int colorComp(const City * a, const City * b) {
   const City *A = a, *B = b;
   int x = A->stroke.color, y = B->stroke.color;
   return (x > y) - (x < y);
@@ -430,7 +435,7 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       ndist2 = dnx * dnx + dny * dny;
     } else {
       ndist2 = dny * dny;
-    }      
+    }
     dnx = pn2.x - pn4.x;
     dny = pn2.y - pn4.y;
     if(xy) {
@@ -472,8 +477,9 @@ void help() {
   printf("\t-V optmize for Voronoi Stipples\n");
   printf("\t-h this help\n");
   }
-  
+
 int generateGcode(int argc, char* argv[], int* penColors) {
+  printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
@@ -552,7 +558,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
       break;
     case 'V': xy = 0;
       break;
-	xy = 1;
+    xy = 1;
       break;
     case 'Y': shiftY = atof(optarg); // shift
       break;
@@ -574,12 +580,12 @@ int generateGcode(int argc, char* argv[], int* penColors) {
       break;
     case 'S': fitToMaterial = atof(optarg);
       break;
-    case 'F': 
+    case 'F':
       flip = 1;
       break;
     case 'Z': zFloor = atof(optarg);
               ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
-              fprintf(stderr, "zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
+              printf("zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
       break;
@@ -591,6 +597,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   //move above to main
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
+  printf("File open string: %s\n", argv[optind]);
   g_image = nsvgParseFromFile(argv[optind],"px",96);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
@@ -669,12 +676,12 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
   zeroX = -bounds[0];
   zeroY = -bounds[1];
-  
+
 #ifdef _WIN32
 seedrand((float)time(0));
 #endif
 
- if(append){ 
+ if(append){
   gcode = fopen(argv[optind+1],"a");
  } else {
   gcode=fopen(argv[optind+1],"w");
@@ -727,7 +734,7 @@ seedrand((float)time(0));
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(paths[k].city == -1){ //means already written
-	      continue;
+          continue;
       } else if(paths[k].city == cities[i].id) {
         break;
       }
@@ -756,7 +763,7 @@ seedrand((float)time(0));
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
           if(penList[p].color == targetColor){
-            targetTool = p; 
+            targetTool = p;
             break;
           }
           targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
@@ -788,14 +795,14 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
           //fprintf(gcode, "( Tool change finished )\n");
           currTool = targetTool;
-        }   
-      }      
+        }
+      }
     }
-    
+
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y); 
+    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
-    //fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color); 
+    //fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
@@ -842,16 +849,16 @@ seedrand((float)time(0));
           printed = 1;
           //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-          if(cityStart==1){          
+          if(cityStart==1){
             fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
             cityStart = 0;
-          }    
+          }
           bxold = bx;
           byold = by;
         }
       paths[j].city = -1; //this path has been written
       } else
-	        break;
+            break;
     }
     if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
@@ -879,8 +886,11 @@ seedrand((float)time(0));
   return 0;
 }
 
+#define BTSVG
+#ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
   int penColors[6] = {-16776966, -16711936, -784384, 1, 1, 1};
   return generateGcode(argc, argv, penColors);
 }
+#endif
