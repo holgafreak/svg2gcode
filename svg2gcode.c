@@ -42,7 +42,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-//efine EMBEDDED
+//#define EMBEDDED
 #ifdef EMBEDDED
 #include "svg2gcode.h"
 #endif
@@ -493,8 +493,8 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   int feed = 13000;
   int slowTravel = 3500;
   int cityStart=1;
-  float zFloor = -1.;
-  float ztraverse = -1.;
+  float zFloor = -3.;
+  float ztraverse = 0.;
   float zengage = -1.;
   float width = -1;
   float height =-1;
@@ -505,7 +505,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   float margin = 40; //xmargin around drawn elements in mm
   float ymargin = 35; //ymargin around drawn elements in mm
   float materialDimensions[2];
-  int fitToMaterial =  0;
+  int fitToMaterial =  1;
   int centerOnMaterial = 1;
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
@@ -578,14 +578,8 @@ int generateGcode(int argc, char* argv[], int* penColors) {
       break;
     case 't': tol = atof(optarg);
       break;
-    case 'S': fitToMaterial = atof(optarg);
-      break;
     case 'F':
       flip = 1;
-      break;
-    case 'Z': zFloor = atof(optarg);
-              ztraverse = zFloor+3.; //dynamicize machine dimensions in z.
-              printf("zFloor set to %f\nztraverse set to %f\n", zFloor, ztraverse);
       break;
     case 'w': widthInmm = atof(optarg);
       break;
