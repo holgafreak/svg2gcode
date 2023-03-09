@@ -796,7 +796,7 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
-    //fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
+    fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
@@ -809,7 +809,6 @@ seedrand((float)time(0));
       first = 1;
       if(paths[j].city == cities[i].id) {
         bezCount = 0;
-          //if(paths[j].points[0] == paths[j].points[2] && paths[j].points[1]==paths[j].points[3]) ;continue;
         cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
         bxold=x;
         byold=y;

@@ -823,7 +823,7 @@ static void nsvg__addShape(NSVGparser* p)
 	} else if (attr->hasStroke == 1) {
 		shape->stroke.type = NSVG_PAINT_COLOR;
 		shape->stroke.color = attr->strokeColor;
-		shape->stroke.color |= (unsigned int)(attr->strokeOpacity*255) << 24;
+		//shape->stroke.color |= (unsigned int)(attr->strokeOpacity*255) << 24;
 	} else if (attr->hasStroke == 2) {
 		shape->stroke.gradient = nsvg__createGradient(p, attr->strokeGradient, shape->bounds, &shape->stroke.type);
 		if (shape->stroke.gradient == NULL)
@@ -1181,6 +1181,7 @@ static unsigned int nsvg__parseColorName(const char* str)
 
 static unsigned int nsvg__parseColor(const char* str)
 {
+	fprintf(stderr, "In nsvg__parseColor: %s\n", str);
 	int len = 0;
 	while(MRDC(str) == ' ') ++str;
 	len = strlen(MRDS(str));
