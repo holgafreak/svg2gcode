@@ -1,6 +1,6 @@
 CC = clang
 GCC = xtensa-esp32s3-elf-gcc
-CFLAGS = -Ofast -v
+CFLAGS = -Ofast -v -mlongcalls
 
 tool: svg2gcode
 
@@ -16,4 +16,4 @@ svg2gcode.o: svg2gcode.c nanosvg.h
 	$(GCC) $(CFLAGS) -c svg2gcode.c
 
 clean:
-	rm -fr svg2code *.o
+	rm -fr svg2gcode *.o
