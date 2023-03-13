@@ -1181,7 +1181,7 @@ static unsigned int nsvg__parseColorName(const char* str)
 
 static unsigned int nsvg__parseColor(const char* str)
 {
-	fprintf(stderr, "In nsvg__parseColor: %s\n", str);
+	// fprintf(stderr, "In nsvg__parseColor: %s\n", str);
 	int len = 0;
 	while(MRDC(str) == ' ') ++str;
 	len = strlen(MRDS(str));
