@@ -478,7 +478,7 @@ void help() {
   printf("\t-h this help\n");
   }
 
-int generateGcode(int argc, char* argv[], int* penColors) {
+int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -501,12 +501,12 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 30;
-  float scale = 0.05; //make this dynamic. //this changes with widthInmm
-  float margin = 40; //xmargin around drawn elements in mm
-  float ymargin = 35; //ymargin around drawn elements in mm
+  float scale = 1; //make this dynamic. //this changes with widthInmm
+  float margin = setXMargin; //xmargin around drawn elements in mm
+  float ymargin = setYMargin; //ymargin around drawn elements in mm
   float materialDimensions[2];
-  int fitToMaterial =  1;
-  int centerOnMaterial = 1;
+  int fitToMaterial =  scaleToMaterial;
+  int centerOnMaterial = centerSvg;
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
   int targetTool = 0; //start as 0 so no tool is matched
@@ -592,6 +592,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   if(shiftY != 30. && flip == 1)
     shiftY = -shiftY;
   printf("File open string: %s\n", argv[optind]);
+  printf("File output string: %s\n", argv[optind+1]);
   g_image = nsvgParseFromFile(argv[optind],"px",96);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
@@ -623,19 +624,21 @@ int generateGcode(int argc, char* argv[], int* penColors) {
   h = fabs(bounds[1]-bounds[3]);
 
   //scaling + fitting operations.
-  if(widthInmm != -1.0){
-    scale = widthInmm/w;
-  }
-
   materialDimensions[0] = 279.4; //available drawing width (X travel)
   materialDimensions[1] = 215.9; //available drawing height (Y travel)
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
   float drawSpaceHeight = materialDimensions[1]-(2*ymargin);
-  float drawingWidth = w; //size of drawing scaled
+  float drawingWidth = w; //size of drawing scaled. Just setting as placeholder for now.
   float drawingHeight = h;
 
   //Scale to material with default margin of 1"
-  if(fitToMaterial == 1){
+
+  if((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight)){ //if larger than material, force scale to material
+    printf("SVG larger than material, forcing scale to material\n");
+    fitToMaterial = 1;
+  }
+
+  if(fitToMaterial == 1){ //this can also increase the size. This is the key difference between fittomaterial == 1 and else {}
     printf("Fitting to material size\n");
 
     //need to identify the bounding dimension.
@@ -658,6 +661,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
     shiftX = margin;
     shiftY = -(ymargin + drawingHeight + yMountOffset);
   }
+
   if(centerOnMaterial == 1){ //rethink for based on x or y bound
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
@@ -675,11 +679,7 @@ int generateGcode(int argc, char* argv[], int* penColors) {
 seedrand((float)time(0));
 #endif
 
- if(append){
-  gcode = fopen(argv[optind+1],"a");
- } else {
-  gcode=fopen(argv[optind+1],"w");
- }
+ gcode=fopen(argv[optind+1],"w");
  if(gcode == NULL) {
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
@@ -884,6 +884,6 @@ seedrand((float)time(0));
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
   int penColors[6] = {-16776966, -16711936, -784384, 1, 1, 1};
-  return generateGcode(argc, argv, penColors);
+  return generateGcode(argc, argv, penColors, 1, 1, 25.4, 50,8);
 }
 #endif
