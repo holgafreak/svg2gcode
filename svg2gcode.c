@@ -478,7 +478,7 @@ void help() {
   printf("\t-h this help\n");
   }
 
-int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin) {
+int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, int zEngage) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -493,9 +493,8 @@ int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, i
   int feed = 13000;
   int slowTravel = 3500;
   int cityStart=1;
-  float zFloor = -3.;
+  float zFloor = zEngage;
   float ztraverse = 0.;
-  float zengage = -1.;
   float width = -1;
   float height =-1;
   char xy = 1;
@@ -884,6 +883,6 @@ seedrand((float)time(0));
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
   int penColors[6] = {-16776966, -16711936, -784384, 1, 1, 1};
-  return generateGcode(argc, argv, penColors, 1, 1, 25.4, 50,8);
+  return generateGcode(argc, argv, penColors, 1, 1, 25.4, 50,8, -3);
 }
 #endif
