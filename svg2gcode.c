@@ -478,6 +478,71 @@ void help() {
   printf("\t-h this help\n");
   }
 
+int intComp(const void *a, const void *b){
+  return (*(int*)a - *(int*)b);
+}
+
+int parseColors(unsigned int* colors, char* fileToOpen){
+  NSVGshape* shape;
+  if(g_image != NULL){
+    nsvgDelete(g_image);
+    printf("Closing previously opened file\n");
+  }
+  g_image = nsvgParseFromFile(fileToOpen, "px", 96);
+  if(g_image == NULL) {
+    printf("error: Can't open input %s\n", fileToOpen);
+  }
+
+  int numUnique = 0; //count of unique color
+  int numShapes = 0; //total number of shapes in SVG
+  for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
+    numShapes++;
+  }
+
+  int colorIndex = 0;
+  unsigned int *colorArr = (unsigned int*)malloc(sizeof(unsigned int)*numShapes); //track all the colors here, then sort. dont know how many shapes, so dynamic mem alloc.
+  for(shape = g_image->shapes; shape != NULL; shape=shape->next){ //go through shapes again, now writing down the color for each shape.
+    colorArr[colorIndex] = shape->stroke.color;
+    colorIndex++;
+  }
+
+  qsort(colorArr, numShapes, sizeof(unsigned int), intComp); //sort the colors.
+
+  for(int i = 0; i < numShapes; i++) {
+    while(i < numShapes-1 && colorArr[i] == colorArr[i+1]){
+      i++;
+    }
+    numUnique++; //count unique colors post qsort.
+  }
+  printf("%d Unique colors\n", numUnique);
+  colors = (unsigned int *)malloc(sizeof(unsigned int)*numUnique); //list of all the colors.
+  
+  int insert = 0;
+  for(int i = 0; i < numShapes; i++){
+    if(insert == 0){
+      colors[insert] = colorArr[insert];
+      insert++;
+      continue;
+    }
+    if(colors[insert-1] != colorArr[i]){
+      colors[insert] = colorArr[i];
+      insert++;
+    }
+    if(insert == numUnique){
+      break;
+    }
+  }
+
+  for(int i = 0; i < numUnique; i++){
+    printf("Color at i = %d: %d\n", i, colors[i]);
+  }
+
+  //where should I free colors
+  free(colorArr);
+  nsvgDelete(g_image);
+  return numUnique;
+}
+
 int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, int zEngage) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -882,7 +947,7 @@ seedrand((float)time(0));
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColors[6] = {-16776966, -16711936, -784384, 1, 1, 1};
+  int penColors[6] = {1, 1, 1, 1, 1, 1};
   return generateGcode(argc, argv, penColors, 1, 1, 25.4, 50,8, -3);
 }
 #endif
