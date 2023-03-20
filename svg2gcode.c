@@ -478,7 +478,8 @@ void help() {
   printf("\t-h this help\n");
   }
 
-int generateGcode(int argc, char* argv[], int* penColors, int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, int zEngage) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
+                  int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, int zEngage) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -878,11 +879,31 @@ seedrand((float)time(0));
   return 0;
 }
 
-#define BTSVG
+//#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColors[6] = {1, 1, 1, 1, 1, 1};
-  return generateGcode(argc, argv, penColors, 1, 1, 25.4, 50,8, -3);
+  int penColorCount[6] = {1, 1, 1, 1, 1, 1}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
+  int *penColors[6];
+  int *penOneColors;
+  int *penTwoColors;
+  int *penThreeColors;
+  int *penFourColors;
+  int *penFiveColors;
+  int *penSixColors;
+  penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]);
+  penTwoColors = (int*)malloc(sizeof(int)*penColorCount[1]);
+  penThreeColors = (int*)malloc(sizeof(int)*penColorCount[2]);
+  penFourColors = (int*)malloc(sizeof(int)*penColorCount[3]);
+  penFiveColors = (int*)malloc(sizeof(int)*penColorCount[4]);
+  penSixColors = (int*)malloc(sizeof(int)*penColorCount[5]);
+  penColors[0] = penOneColors;
+  penColors[1] = penTwoColors;
+  penColors[2] = penThreeColors;
+  penColors[3] = penFourColors;
+  penColors[4] = penFiveColors;
+  penColors[5] = penSixColors;
+
+  return generateGcode(argc, argv, penColors, penColorCount, 1, 1, 25.4, 50.8, -3);
 }
 #endif
