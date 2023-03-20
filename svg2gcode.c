@@ -60,6 +60,7 @@
 
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
+static int numTools = 6;
 static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static int doBez = 1;
@@ -71,7 +72,7 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
-  int color;
+  int *colors;
   int count;
   int slot;
 } Pen;
@@ -338,8 +339,17 @@ void mergeSort(City * arr, int left, int right, int level, int* mergeLevel) {
   }
 }
 
+int colorInPen(Pen pen, int color, int colorCount){
+  for(int i = 0; i < colorCount; i++){
+    if(pen.colors[i] == color){
+      return 1;
+    }
+  }
+  return 0;
+}
+
 //calculate the svg space bounds for the image and create initial city sized list of colors.
-static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
+static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int penColorCount[6])
 {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -360,13 +370,13 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList)
         bounds[1] = minf(bounds[1], p[1]);
         bounds[2] = maxf(bounds[2], p[0]);
         bounds[3] = maxf(bounds[3], p[1]);
-          pointsCount++;
+        pointsCount++;
       }
       pathCount++;
-          }
+    }
     //add to penList[n] here based on color.
     for(int c = 0; c < numTools; c++){
-        if(shape->stroke.color == penList[c].color){
+        if(colorInPen(penList[c], shape->stroke.color, penColorCount[c])){ //need an inPenColors here. Take a pen and a color int and count of colors to pen. 1 if color in pen.
           penList[c].count++;
           colorMatch =1;
           continue;
@@ -489,7 +499,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   City *cities;
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  int numTools = 6;
+  //int numTools = 6;
   int npaths;
   int feed = 13000;
   int slowTravel = 3500;
@@ -605,10 +615,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //assign pen colors for penColors input
   for(int i = 0; i<numTools;i++){
     printf("Tool %d in penColors color: %d\n", i, penColors[i]);
-    penList[i].color = penColors[i];
+    penList[i].colors = penColors[i]; //assign penList[i].colors to the pointer passed in from penColors (there are numtools poiners to assign.)
   }
 
-  calcBounds(g_image, numTools, penList);
+  calcBounds(g_image, numTools, penList, penColorCount);
   printf("Color counts:\n");
   for(int c = 0; c<numTools;c++){
     printf("\tp%d=%d\n",c,penList[c].count);
@@ -756,7 +766,8 @@ seedrand((float)time(0));
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
-          if(penList[p].color == targetColor){
+          if(colorInPen(penList[p], targetColor, penColorCount[p])){
+          //if(penList[p].color == targetColor){
             targetTool = p;
             break;
           }
@@ -780,7 +791,7 @@ seedrand((float)time(0));
           currTool = targetTool;
         }
         if(currTool == -1){ //no tool picked up
-          currColor = penList[targetTool].color;
+          currColor = penList[targetTool].colors[0];
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
           fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
@@ -883,27 +894,73 @@ seedrand((float)time(0));
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColorCount[6] = {1, 1, 1, 1, 1, 1}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
-  int *penColors[6];
-  int *penOneColors;
+  int penColorCount[6] = {1, 0, 0, 0, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
+  int *penColors[6]; //Init arr of pointers for pen colors.
+  int *penOneColors; //Init pointer for colors for each pen
   int *penTwoColors;
   int *penThreeColors;
   int *penFourColors;
   int *penFiveColors;
   int *penSixColors;
-  penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]);
+  int penOneColorArr[] = {1}; //Integer values of colors for each pen. -1 in an arr means unassigned.
+  int penTwoColorArr[] = {-1};
+  int penThreeColorArr[] = {-1};
+  int penFourColorArr[] = {-1};
+  int penFiveColorArr[] = {-1};
+  int penSixColorArr[] = {-1};
+  penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]); //Malloc number of colors per pen to each pointer
   penTwoColors = (int*)malloc(sizeof(int)*penColorCount[1]);
   penThreeColors = (int*)malloc(sizeof(int)*penColorCount[2]);
   penFourColors = (int*)malloc(sizeof(int)*penColorCount[3]);
   penFiveColors = (int*)malloc(sizeof(int)*penColorCount[4]);
   penSixColors = (int*)malloc(sizeof(int)*penColorCount[5]);
-  penColors[0] = penOneColors;
+  //assign colors to malloc'd mem
+  for(int i = 0; i<numTools; i++){
+    for(int j = 0; j < penColorCount[i]; j++){
+      switch(i) {
+        case 0:
+          printf("Assigning penOneColorArr[%d] for tool %d\n", j, i);
+          penOneColors[j] = penOneColorArr[j];
+          break;
+        case 1:
+          printf("Assigning penTwoColorArr[%d] for tool %d\n", j, i);
+          penTwoColors[j] = penTwoColorArr[j];
+          break;
+        case 2:
+          printf("Assigning penThreeColorArr[%d] for tool %d\n", j, i);
+          penThreeColors[j] = penThreeColorArr[j];
+          break;
+        case 3:
+          printf("Assigning penFourColorArr[%d] for tool %d\n", j, i);
+          penFourColors[j] = penFourColorArr[j];
+          break;
+        case 4:
+          printf("Assigning penFiveColorArr[%d] for tool %d\n", j, i);
+          penFiveColors[j] = penFiveColorArr[j];
+          break;
+        case 5:
+          printf("Assigning penSixColorArr[%d] for tool %d\n", j, i);
+          penSixColors[j] = penSixColorArr[j];
+          break;
+      }
+    }
+  }
+
+  penColors[0] = penOneColors; //Set arr pointers to malloc'd pointers
   penColors[1] = penTwoColors;
   penColors[2] = penThreeColors;
   penColors[3] = penFourColors;
   penColors[4] = penFiveColors;
   penColors[5] = penSixColors;
 
-  return generateGcode(argc, argv, penColors, penColorCount, 1, 1, 25.4, 50.8, -3);
+  int res = generateGcode(argc, argv, penColors, penColorCount, 1, 1, 25.4, 50.8, -3);
+  //Free malloc'd memory
+  free(penOneColors);
+  free(penTwoColors);
+  free(penThreeColors);
+  free(penFourColors);
+  free(penFiveColors);
+  free(penSixColors);
+  return res;
 }
 #endif
