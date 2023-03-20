@@ -895,25 +895,20 @@ seedrand((float)time(0));
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
   int penColorCount[6] = {2, 1, 1, 1, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
-  int *penColors[6]; //Init arr of pointers for pen colors.
-  int *penOneColors; //Init pointer for colors for each pen
-  int *penTwoColors;
-  int *penThreeColors;
-  int *penFourColors;
-  int *penFiveColors;
-  int *penSixColors;
   int penOneColorArr[] = {65280, 16711680}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
   int penTwoColorArr[] = {1710618};
   int penThreeColorArr[] = {2763519};
   int penFourColorArr[] = {-1};
   int penFiveColorArr[] = {-1};
   int penSixColorArr[] = {-1};
-  penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]); //Malloc number of colors per pen to each pointer
-  penTwoColors = (int*)malloc(sizeof(int)*penColorCount[1]);
-  penThreeColors = (int*)malloc(sizeof(int)*penColorCount[2]);
-  penFourColors = (int*)malloc(sizeof(int)*penColorCount[3]);
-  penFiveColors = (int*)malloc(sizeof(int)*penColorCount[4]);
-  penSixColors = (int*)malloc(sizeof(int)*penColorCount[5]);
+
+  int *penColors[6]; //Init arr of pointers for pen colors.
+  int *penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]); //Malloc number of colors per pen to each pointer
+  int *penTwoColors = (int*)malloc(sizeof(int)*penColorCount[1]);
+  int *penThreeColors = (int*)malloc(sizeof(int)*penColorCount[2]);
+  int *penFourColors = (int*)malloc(sizeof(int)*penColorCount[3]);
+  int *penFiveColors = (int*)malloc(sizeof(int)*penColorCount[4]);
+  int *penSixColors = (int*)malloc(sizeof(int)*penColorCount[5]);
   //assign colors to malloc'd mem
   for(int i = 0; i<numTools; i++){
     for(int j = 0; j < penColorCount[i]; j++){
