@@ -807,7 +807,7 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
-    //fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
+    fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
     //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
@@ -894,7 +894,7 @@ seedrand((float)time(0));
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColorCount[6] = {1, 0, 0, 0, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
+  int penColorCount[6] = {2, 1, 1, 1, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
   int *penColors[6]; //Init arr of pointers for pen colors.
   int *penOneColors; //Init pointer for colors for each pen
   int *penTwoColors;
@@ -902,9 +902,9 @@ int main(int argc, char* argv[]){
   int *penFourColors;
   int *penFiveColors;
   int *penSixColors;
-  int penOneColorArr[] = {1}; //Integer values of colors for each pen. -1 in an arr means unassigned.
-  int penTwoColorArr[] = {-1};
-  int penThreeColorArr[] = {-1};
+  int penOneColorArr[] = {65280, 16711680}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
+  int penTwoColorArr[] = {1710618};
+  int penThreeColorArr[] = {2763519};
   int penFourColorArr[] = {-1};
   int penFiveColorArr[] = {-1};
   int penSixColorArr[] = {-1};
