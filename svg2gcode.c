@@ -890,7 +890,7 @@ seedrand((float)time(0));
   return 0;
 }
 
-//#define BTSVG
+#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
@@ -909,6 +909,12 @@ int main(int argc, char* argv[]){
   int *penFourColors = (int*)malloc(sizeof(int)*penColorCount[3]);
   int *penFiveColors = (int*)malloc(sizeof(int)*penColorCount[4]);
   int *penSixColors = (int*)malloc(sizeof(int)*penColorCount[5]);
+  memset(penOneColors, 0, sizeof(int)*penColorCount[0]);
+  memset(penTwoColors, 0, sizeof(int)*penColorCount[1]);
+  memset(penThreeColors, 0, sizeof(int)*penColorCount[2]);
+  memset(penFourColors, 0, sizeof(int)*penColorCount[3]);
+  memset(penFiveColors, 0, sizeof(int)*penColorCount[4]);
+  memset(penSixColors, 0, sizeof(int)*penColorCount[5]);
   //assign colors to malloc'd mem
   for(int i = 0; i<numTools; i++){
     for(int j = 0; j < penColorCount[i]; j++){
