@@ -890,25 +890,17 @@ seedrand((float)time(0));
   return 0;
 }
 
-//#define BTSVG
+#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
   int penColorCount[6] = {2, 1, 1, 1, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
-  int *penColorArrs[6]; //Init arr of pointers for pen colors.
   int penOneColorArr[] = {65280, 16711680}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
   int penTwoColorArr[] = {1710618};
   int penThreeColorArr[] = {2763519};
   int penFourColorArr[] = {-1};
   int penFiveColorArr[] = {-1};
   int penSixColorArr[] = {-1};
-  //set penColorArrs to initialzed color arrays.
-  penColorArrs[0] = penOneColorArr;
-  penColorArrs[1] = penTwoColorArr;
-  penColorArrs[2] = penThreeColorArr;
-  penColorArrs[3] = penFourColorArr;
-  penColorArrs[4] = penFiveColorArr;
-  penColorArrs[5] = penSixColorArr;
 
   int *penColors[6]; //Init arr of pointers for pen colors.
   int *penOneColors = (int*)malloc(sizeof(int)*penColorCount[0]); //Malloc number of colors per pen to each pointer
@@ -923,49 +915,37 @@ int main(int argc, char* argv[]){
   memset(penFourColors, 0, sizeof(int)*penColorCount[3]);
   memset(penFiveColors, 0, sizeof(int)*penColorCount[4]);
   memset(penSixColors, 0, sizeof(int)*penColorCount[5]);
-  //set penColorArrs to initialzed color arrays.
-  //smarter assignment of penColors
+  //assign colors to malloc'd mem
   for(int i = 0; i<numTools; i++){
-    int k = 0;
     for(int j = 0; j < penColorCount[i]; j++){
-      if(penColorArrs[i][j] != -1){
-        penColors[i][k] = penColorArrs[i][j];
-        k++;
+      switch(i) {
+        case 0:
+          printf("Assigning penOneColorArr[%d] for tool %d\n", j, i);
+          penOneColors[j] = penOneColorArr[j];
+          break;
+        case 1:
+          printf("Assigning penTwoColorArr[%d] for tool %d\n", j, i);
+          penTwoColors[j] = penTwoColorArr[j];
+          break;
+        case 2:
+          printf("Assigning penThreeColorArr[%d] for tool %d\n", j, i);
+          penThreeColors[j] = penThreeColorArr[j];
+          break;
+        case 3:
+          printf("Assigning penFourColorArr[%d] for tool %d\n", j, i);
+          penFourColors[j] = penFourColorArr[j];
+          break;
+        case 4:
+          printf("Assigning penFiveColorArr[%d] for tool %d\n", j, i);
+          penFiveColors[j] = penFiveColorArr[j];
+          break;
+        case 5:
+          printf("Assigning penSixColorArr[%d] for tool %d\n", j, i);
+          penSixColors[j] = penSixColorArr[j];
+          break;
       }
     }
   }
-
-  //assign colors to malloc'd mem
-  // for(int i = 0; i<numTools; i++){
-  //   for(int j = 0; j < penColorCount[i]; j++){
-  //     switch(i) {
-  //       case 0:
-  //         printf("Assigning penOneColorArr[%d] for tool %d\n", j, i);
-  //         penOneColors[j] = penOneColorArr[j];
-  //         break;
-  //       case 1:
-  //         printf("Assigning penTwoColorArr[%d] for tool %d\n", j, i);
-  //         penTwoColors[j] = penTwoColorArr[j];
-  //         break;
-  //       case 2:
-  //         printf("Assigning penThreeColorArr[%d] for tool %d\n", j, i);
-  //         penThreeColors[j] = penThreeColorArr[j];
-  //         break;
-  //       case 3:
-  //         printf("Assigning penFourColorArr[%d] for tool %d\n", j, i);
-  //         penFourColors[j] = penFourColorArr[j];
-  //         break;
-  //       case 4:
-  //         printf("Assigning penFiveColorArr[%d] for tool %d\n", j, i);
-  //         penFiveColors[j] = penFiveColorArr[j];
-  //         break;
-  //       case 5:
-  //         printf("Assigning penSixColorArr[%d] for tool %d\n", j, i);
-  //         penSixColors[j] = penSixColorArr[j];
-  //         break;
-  //     }
-  //   }
-  // }
 
   penColors[0] = penOneColors; //Set arr pointers to malloc'd pointers
   penColors[1] = penTwoColors;
