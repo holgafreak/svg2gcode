@@ -41,11 +41,8 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
-
-//#define EMBEDDED
-#ifdef EMBEDDED
 #include "svg2gcode.h"
-#endif
+
 
 //#define TESTRNG // remove if on linux or osx
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
@@ -488,8 +485,8 @@ void help() {
   printf("\t-h this help\n");
   }
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
-                  int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, int zEngage) {
+//want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, float zEngage) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -635,7 +632,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   //scaling + fitting operations.
   materialDimensions[0] = 279.4; //available drawing width (X travel)
-  materialDimensions[1] = 215.9; //available drawing height (Y travel)
+  materialDimensions[1] = 350; //available drawing height (Y travel)
   float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
   float drawSpaceHeight = materialDimensions[1]-(2*ymargin);
   float drawingWidth = w; //size of drawing scaled. Just setting as placeholder for now.
@@ -669,15 +666,18 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       printf("scale = %f \n", scale);
     }
     shiftX = margin;
-    shiftY = -(ymargin + drawingHeight + yMountOffset);
+    shiftY = ymargin;
   }
-
   if(centerOnMaterial == 1){ //rethink for based on x or y bound
     printf("Centering on drawing space\n");
     float centerX = drawingWidth/2;
-    shiftX = (margin + drawSpaceWidth/2) - (drawingWidth/2);
-    shiftY = -((ymargin + drawSpaceHeight/2) + (drawingHeight/2) + yMountOffset);
+    shiftX = margin + ((drawSpaceWidth/2) - (drawingWidth/2));
+    shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
+
+  // shiftX = 0;
+  // shiftY = 0;
+
   printf("ShiftX:%f, ShiftY:%f\n", shiftX, shiftY);
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
@@ -808,7 +808,6 @@ seedrand((float)time(0));
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
-    //to conver the int to hex, take bytes 0-1-2 of the converted hex value?
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
           cityStart = 0;
