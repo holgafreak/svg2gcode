@@ -486,7 +486,7 @@ void help() {
   }
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, float zEngage) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[2], int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, float zEngage) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -511,7 +511,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float scale = 1; //make this dynamic. //this changes with widthInmm
   float margin = setXMargin; //xmargin around drawn elements in mm
   float ymargin = setYMargin; //ymargin around drawn elements in mm
-  float materialDimensions[2];
   int fitToMaterial =  scaleToMaterial;
   int centerOnMaterial = centerSvg;
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
@@ -631,10 +630,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   h = fabs(bounds[1]-bounds[3]);
 
   //scaling + fitting operations.
-  materialDimensions[0] = 279.4; //available drawing width (X travel)
-  materialDimensions[1] = 350; //available drawing height (Y travel)
-  float drawSpaceWidth = materialDimensions[0]-(2*margin); //space available on paper for drawing.
-  float drawSpaceHeight = materialDimensions[1]-(2*ymargin);
+  float drawSpaceWidth = paperDimensions[0]-(2*margin); //space available on paper for drawing.
+  float drawSpaceHeight = paperDimensions[1]-(2*ymargin);
   float drawingWidth = w; //size of drawing scaled. Just setting as placeholder for now.
   float drawingHeight = h;
 
