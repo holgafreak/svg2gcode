@@ -151,6 +151,7 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi);
 
 // Deletes list of paths.
 void nsvgDelete(NSVGimage* image);
+unsigned int nsvg__parseColor(const char* str);
 
 #ifdef __cplusplus
 };
@@ -1179,7 +1180,7 @@ static unsigned int nsvg__parseColorName(const char* str)
 	return NSVG_RGB(128, 128, 128);
 }
 
-static unsigned int nsvg__parseColor(const char* str)
+unsigned int nsvg__parseColor(const char* str)
 {
 	// fprintf(stderr, "In nsvg__parseColor: %s\n", str);
 	int len = 0;
