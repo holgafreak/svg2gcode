@@ -2,6 +2,8 @@ CC = clang
 GCC = xtensa-esp32s3-elf-gcc
 CFLAGS = -Ofast -v -mlongcalls
 
+all: release
+
 tool: svg2gcode
 
 lib: libsvg2gcode.a
@@ -17,3 +19,5 @@ svg2gcode.o: svg2gcode.c nanosvg.h
 
 clean:
 	rm -fr svg2gcode *.o
+
+release: tool lib
