@@ -610,7 +610,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   memset(penList, 0, numTools*sizeof(Pen));
   //assign pen colors for penColors input
   for(int i = 0; i<numTools;i++){
-    printf("Tool %d in penColors color: %d\n", i, penColors[i]);
+    //printf("Tool %d in penColors color: %d\n", i, penColors[i]);
     penList[i].colors = penColors[i]; //assign penList[i].colors to the pointer passed in from penColors (there are numtools poiners to assign.)
   }
 
@@ -886,7 +886,7 @@ seedrand((float)time(0));
   return 0;
 }
 
-#define BTSVG
+//#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
@@ -950,7 +950,8 @@ int main(int argc, char* argv[]){
   penColors[4] = penFiveColors;
   penColors[5] = penSixColors;
 
-  int res = generateGcode(argc, argv, penColors, penColorCount, 1, 1, 25.4, 50.8, -3);
+  float paperDimensions[2] = {1.0, 1.0};
+  int res = generateGcode(argc, argv, penColors, penColorCount, paperDimensions, 1, 1, 25.4, 50.8, -3);
   //Free malloc'd memory
   free(penOneColors);
   free(penTwoColors);
