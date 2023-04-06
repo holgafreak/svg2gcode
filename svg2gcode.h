@@ -1,13 +1,15 @@
 #ifndef SVG2GCODE_H
 #define SVG2GCODE_H
 
-#include <iostream>
+#ifndef NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
+#endif
 
-// Function prototypes
-int generateGcode(int, char**, int*);
-
-void debugOut(){
-    std::cout << "Can you see this?" << std::endl;
+#ifdef __cplusplus
+extern "C" {
+#endif
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float* paperDimensions, int scaleToMaterial, int centerOnMaterial, float xMargin, float yMargin, float zEngage);
+#ifdef __cplusplus
 }
-
+#endif
 #endif
