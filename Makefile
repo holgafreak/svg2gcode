@@ -1,5 +1,5 @@
 CC = clang
-GCC = xtensa-esp32s3-elf-gcc
+GCC = clang
 CFLAGS = -Ofast -v -mlongcalls
 
 all: release

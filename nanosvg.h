@@ -703,7 +703,7 @@ static NSVGgradientData* nsvg__findGradientData(NSVGparser* p, const char* id)
 {
 	NSVGgradientData* grad = p->gradients;
 	while (grad) {
-        printf("1: %c vs %c\r\n", grad->id, MRDS(grad->id));
+        printf("1: %s vs %s\r\n", grad->id, MRDS(grad->id));
 		if (strcmp(MRDS(grad->id), MRDS(id)) == 0)
 			return grad;
 		grad = grad->next;
