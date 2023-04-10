@@ -776,7 +776,7 @@ seedrand((float)time(0));
           //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
           //add pickup and dropoff logic
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-          fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
+          fprintf(gcode, "G1 Z%f F%i\n", 0, feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
@@ -791,7 +791,7 @@ seedrand((float)time(0));
           currColor = penList[targetTool].colors[0];
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-          fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
+          fprintf(gcode, "G1 Z%f F%i\n", 0, feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
@@ -867,7 +867,7 @@ seedrand((float)time(0));
       printed = 1;
     }
   }
-  fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
+  fprintf(gcode, "G1 Z%f F%i\n", 0, feed);
   //drop off current tool
   fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
   fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
