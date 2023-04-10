@@ -8,7 +8,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float* paperDimensions, int scaleToMaterial, int centerOnMaterial, float xMargin, float yMargin, float zEngage);
+int generateGcode(int argc, char* argv[], int** penColors, int* penColorCount, float* paperDimensions, int scaleToMaterial, int centerOnMaterial);
 #ifdef __cplusplus
 }
 #endif

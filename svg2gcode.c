@@ -486,7 +486,7 @@ void help() {
   }
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[2], int scaleToMaterial, int centerSvg, float setXMargin, float setYMargin, float zEngage) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -501,16 +501,16 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int feed = 13000;
   int slowTravel = 3500;
   int cityStart=1;
-  float zFloor = zEngage;
-  float ztraverse = 0.;
+  float zFloor = paperDimensions[4];
+  float ztraverse = paperDimensions[4] + paperDimensions[5];
   float width = -1;
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 30;
   float scale = 1; //make this dynamic. //this changes with widthInmm
-  float margin = setXMargin; //xmargin around drawn elements in mm
-  float ymargin = setYMargin; //ymargin around drawn elements in mm
+  float margin = paperDimensions[2]; //xmargin around drawn elements in mm
+  float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
   int fitToMaterial =  scaleToMaterial;
   int centerOnMaterial = centerSvg;
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
@@ -776,7 +776,7 @@ seedrand((float)time(0));
           //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
           //add pickup and dropoff logic
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-          fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+          fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
@@ -791,7 +791,7 @@ seedrand((float)time(0));
           currColor = penList[targetTool].colors[0];
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-          fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+          fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
@@ -867,7 +867,7 @@ seedrand((float)time(0));
       printed = 1;
     }
   }
-  fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+  fprintf(gcode, "G1 Z%f F%d\n", 0, feed);
   //drop off current tool
   fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
   fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
@@ -886,7 +886,7 @@ seedrand((float)time(0));
   return 0;
 }
 
-//#define BTSVG
+#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
