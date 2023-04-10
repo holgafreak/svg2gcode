@@ -724,8 +724,8 @@ seedrand((float)time(0));
 
   printf("\n");
   if(first) {
-    fprintf(gcode,"G92X0Y0Z0\n");
     fprintf(gcode,GHEADER,pwr);
+    fprintf(gcode,"G92X0Y0Z0\n");
   }
 
   k=0;
