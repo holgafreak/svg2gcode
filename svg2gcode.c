@@ -486,7 +486,8 @@ void help() {
   }
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg) {
+//machineType 0 = 6-Color, 1 = MVP, 2 = LFP.
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -759,8 +760,8 @@ seedrand((float)time(0));
       miny = y;
     }
 
-    //colorCheck and tracking
-    if(cityStart ==1){
+    //colorCheck and tracking for TOOLCHANGE
+    if(cityStart ==1 && (machineType == 0)){
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
@@ -801,6 +802,7 @@ seedrand((float)time(0));
         }
       }
     }
+    //TOOLCHANGE END
 
     fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
@@ -870,10 +872,14 @@ seedrand((float)time(0));
   }
   fprintf(gcode, "G1 Z%i F%i\n", 0, feed);
   //drop off current tool
-  fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-  fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-  fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
-  fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+  //TOOLCHANGE START
+  if(machineType == 0){
+    fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+    fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+    fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
+    fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+  }
+  //TOOLCHANGE END
   fprintf(gcode,GFOOTER);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
