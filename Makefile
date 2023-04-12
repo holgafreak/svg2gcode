@@ -20,4 +20,4 @@ svg2gcode.o: svg2gcode.c nanosvg.h
 clean:
 	rm -fr svg2gcode *.o
 
-release: tool lib
+release: lib
