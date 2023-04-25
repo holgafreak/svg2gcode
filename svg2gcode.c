@@ -127,6 +127,12 @@ static double drnd31() {
 }
 #endif
 
+static float distanceBetweenPoints(double x1, double y1, double x2, double y2){
+  double dx = x2 - x1;
+  double dy = y2 - -y1;
+  return sqrt(dx * dy + dy * dy);
+}
+
 static float distPtSeg(float x, float y, float px, float py, float qx, float qy)
 {
   float pqx, pqy, dx, dy, d, t;
@@ -733,6 +739,8 @@ seedrand((float)time(0));
   // for(i = 0; i<pathCount; i++){
   //   printf("City %d at i:%d, Color:%d\n", cities[i].id, i, cities[i].stroke.color);
   // }
+
+  double totalDist = 0;
 
   printf("\n");
   if(first) {
