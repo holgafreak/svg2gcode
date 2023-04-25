@@ -42,7 +42,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include "svg2gcode.h"
-
+#include <math.h>
 
 //#define TESTRNG // remove if on linux or osx
 //#define DO_HPGL //remove comment if you want to get a HPGL-code
@@ -406,7 +406,11 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
-  for(i=0;i<800*pathCount;i++) {
+  printf("Path count = %i\n", pathCount);
+  int numComp = floor(sqrt(pointsCount));
+  printf("numComp = %i\n",numComp);
+  for(i=0;i<numComp*pathCount;i++) {
+    //printf("Reorder i = %i\n", i);
     indexA = (int)(RANDOM()*(pathCount-2));
     indexB = (int)(RANDOM()*(pathCount-2));
     if(abs(indexB-indexA) < 2){
