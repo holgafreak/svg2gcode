@@ -621,14 +621,18 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("\tp%d=%d\n",c,penList[c].count);
   }
 
+  //Toggle bounds vs width maybe?
+
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
   printf("Image width x height: %f x %f\n", width, height);
 
-  //bounding box dimensions of drawn svg elements.
-  w = fabs(bounds[0]-bounds[2]);
-  h = fabs(bounds[1]-bounds[3]);
+  //bounding box dimensions of drawn svg elements. Toggling between these different settings of w and h may be the change we want.
+  //px * width/height. This is the width x height of the svg. Why are paths being drawn to this size?
+  w = width;
+  h = height; 
+  printf("w x h: %f x %f\n", w, h);
 
   //scaling + fitting operations.
   float drawSpaceWidth = paperDimensions[0]-(2*margin); //space available on paper for drawing.
@@ -680,8 +684,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
   fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
-  zeroX = -bounds[0];
-  zeroY = -bounds[1];
+  //offsetting by the -min x and miny, which would move it over the amount. Think this is why 
+  //the drawing is not respecting viewbox attributes.
+  zeroX = 0;//-bounds[0];
+  zeroY = 0;//-bounds[1];
 
 #ifdef _WIN32
 seedrand((float)time(0));
@@ -692,6 +698,7 @@ seedrand((float)time(0));
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
  }
+  fprintf(gcode, "w x h: %f x %f\n", w, h);
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
