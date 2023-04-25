@@ -698,7 +698,7 @@ seedrand((float)time(0));
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
  }
-  fprintf(gcode, "w x h: %f x %f\n", w, h);
+  //fprintf(gcode, "w x h: %f x %f\n", w, h);
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
