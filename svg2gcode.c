@@ -62,6 +62,9 @@ static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static int doBez = 1;
 static struct NSVGimage* g_image = NULL;
+int numCompOut = 0;
+int pathCountOut = 0;
+int pointCountOut = 0;
 
 typedef struct {
   float x;
@@ -127,10 +130,14 @@ static double drnd31() {
 }
 #endif
 
-static float distanceBetweenPoints(double x1, double y1, double x2, double y2){
-  double dx = x2 - x1;
-  double dy = y2 - -y1;
-  return sqrt(dx * dy + dy * dy);
+double distanceBetweenPoints(double x1, double y1, double x2, double y2){
+  //printf("Distance between points, x1: %f, y1: %f, x2: %f, y2: %f\n", x1, y1, x2, y2);
+  double result;
+  double dx2 = (x2 - x1)*(x2 - x1);
+  double dy2 = (y2 - y1)*(y2 - y1);
+  result = sqrt(dx2 + dy2);
+  //printf("Distance between points: %f\n", result);
+  return result;
 }
 
 static float distPtSeg(float x, float y, float px, float py, float qx, float qy)
@@ -412,9 +419,10 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
-  printf("Path count = %i\n", pathCount);
+  //printf("Path count = %i\n", pathCount);
   int numComp = floor(sqrt(pointsCount));
-  printf("numComp = %i\n",numComp);
+  //int numComp = 10;
+  //printf("numComp = %i\n",numComp);
   for(i=0;i<numComp*pathCount;i++) {
     //printf("Reorder i = %i\n", i);
     indexA = (int)(RANDOM()*(pathCount-2));
@@ -472,6 +480,9 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       }
     }
   }
+  pathCountOut = pathCount;
+  pointCountOut = pointsCount;
+  numCompOut = numComp;
 }
 
 void help() {
@@ -532,7 +543,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float toolChangePos = -51.5;
   float tol = 1; //smaller is better
   float accuracy = 0.05; //smaller is better
-  float x,y,bx,by,bxold,byold,d,firstx,firsty;
+  float x,y,bx,by,bxold,byold,firstx,firsty;
+  double d;
   float xold,yold;
   int flip = 1; //may want to pull out.
   int printed=0;
@@ -733,7 +745,7 @@ seedrand((float)time(0));
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting cities by color\n");
   int mergeCount = 0;
-  int* mergeLevel = &mergeCount;
+  int* mergeLevel = &mergeCount; 
   mergeSort(cities, 0, pathCount-1, 0, mergeLevel); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
 
   // for(i = 0; i<pathCount; i++){
@@ -867,7 +879,11 @@ seedrand((float)time(0));
           if(y < miny){
             miny = by;
           }
-          d = sqrt((bx-bxold)*(bx-bxold)+(by-byold)*(by-byold));
+          d = 0;
+          //printf("Distance before: %f\n", d);
+          d = distanceBetweenPoints(bxold, byold, bx, by);
+          //printf("Distance after: %f\n", d);
+          totalDist += d;
           printed = 1;
           //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
@@ -899,7 +915,10 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   }
   //TOOLCHANGE END
+  totalDist = totalDist/1000; //conversion to meters
   fprintf(gcode,GFOOTER);
+  fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
+  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
