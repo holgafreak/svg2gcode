@@ -507,7 +507,7 @@ void help() {
   }
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-//machineType 0 = 6-Color, 1 = MVP, 2 = LFP.
+//machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -529,7 +529,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
-  int numReord = 30;
+  int numReord = 10;
   float scale = 1; //make this dynamic. //this changes with widthInmm
   float margin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
@@ -757,6 +757,11 @@ seedrand((float)time(0));
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
+    if(machineType == 0 || machineType == 2) { //6Color or MVP
+      fprintf(gcode, "G1 Y0 F%i\n", feed);
+      fprintf(gcode, "G1 Y%f F%i\n", -1*paperDimensions[1], feed);
+      fprintf(gcode, "G1 Y0 F%i\n", feed);
+    }
     //fprintf(gcode,"G92X0Y0Z0\n");
   }
 
@@ -792,7 +797,7 @@ seedrand((float)time(0));
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart ==1 && (machineType == 0)){
+    if(cityStart ==1 && (machineType == 0)){ //City start and 6Color
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
@@ -879,7 +884,6 @@ seedrand((float)time(0));
           if(y < miny){
             miny = by;
           }
-          d = 0;
           //printf("Distance before: %f\n", d);
           d = distanceBetweenPoints(bxold, byold, bx, by);
           //printf("Distance after: %f\n", d);
@@ -908,7 +912,7 @@ seedrand((float)time(0));
   fprintf(gcode, "G1 Z%i F%i\n", 0, feed);
   //drop off current tool
   //TOOLCHANGE START
-  if(machineType == 0){
+  if(machineType == 0){ //6Color
     fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
     fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
     fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
@@ -926,6 +930,10 @@ seedrand((float)time(0));
   free(cities);
   nsvgDelete(g_image);
   free(penList);
+  //send a signal to qml that the gcode is done
+  
+
+
   // printf("writeCond reached = %d\n", writeCond);
   // printf("skipCond reached = %d\n", skipCond);
   return 0;
