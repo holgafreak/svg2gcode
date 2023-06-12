@@ -844,9 +844,7 @@ seedrand((float)time(0));
     }
     //TOOLCHANGE END
 
-    if(machineType == 1){
-      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-    }
+    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
