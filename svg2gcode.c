@@ -698,9 +698,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     shiftX = margin + ((drawSpaceWidth/2) - (drawingWidth/2));
     shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
-  
+
   if(machineType == 0 || machineType == 2){ //MVP or 6-Color
-    shiftX += 279.4 - paperDimensions[0];
+    shiftX += 306 - paperDimensions[0];
   }
 
   // shiftX = 0;
