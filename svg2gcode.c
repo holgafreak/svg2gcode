@@ -840,7 +840,7 @@ seedrand((float)time(0));
     }
     //TOOLCHANGE END
 
-    fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+    //fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
@@ -920,6 +920,8 @@ seedrand((float)time(0));
   }
   //TOOLCHANGE END
   totalDist = totalDist/1000; //conversion to meters
+  //send paper to front
+  fprintf(gcode, "G0 Y0\n");
   fprintf(gcode,GFOOTER);
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
