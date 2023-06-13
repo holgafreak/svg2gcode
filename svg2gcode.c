@@ -700,10 +700,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
 
-  if(machineType == 0){ 6-Color
+  if(machineType == 0){ //6-Color
     shiftX += 306 - paperDimensions[0];
   } else if (machineType == 2){
-    shiftX += 215.9 - paperDimensions[0]
+    shiftX += 215.9 - paperDimensions[0];
   }
 
   // shiftX = 0;
