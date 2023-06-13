@@ -508,7 +508,7 @@ void help() {
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
-//paperDimensions [X, Y, Z, ?, ?, ?]
+//paperDimensions [paperX, paperY, xMargin, yMargin, zEngage, penLift]
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -766,7 +766,7 @@ seedrand((float)time(0));
     fprintf(gcode,GHEADER,pwr);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G1 Y0 F%i\n", feed);
-      fprintf(gcode, "G1 Y%f F%i\n", -1*paperDimensions[1], feed);
+      fprintf(gcode, "G1 Y%f F%i\n", (-1*(paperDimensions[1]-100), feed);
       fprintf(gcode, "G1 Y0 F%i\n", feed);
     }
     //fprintf(gcode,"G92X0Y0Z0\n");
