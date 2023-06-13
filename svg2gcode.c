@@ -508,6 +508,7 @@ void help() {
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
+//paperDimensions [paperX, paperY, xMargin, yMargin, zEngage, penLift]
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -699,6 +700,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
 
+  if(machineType == 0){ //6-Color
+    shiftX += 306 - paperDimensions[0];
+  } else if (machineType == 2){
+    shiftX += 215.9 - paperDimensions[0];
+  }
+
   // shiftX = 0;
   // shiftY = 0;
 
@@ -759,7 +766,7 @@ seedrand((float)time(0));
     fprintf(gcode,GHEADER,pwr);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G1 Y0 F%i\n", feed);
-      fprintf(gcode, "G1 Y%f F%i\n", -1*paperDimensions[1], feed);
+      fprintf(gcode, "G1 Y%f F%i\n", (-1*(paperDimensions[1]-100), feed);
       fprintf(gcode, "G1 Y0 F%i\n", feed);
     }
     //fprintf(gcode,"G92X0Y0Z0\n");
@@ -797,7 +804,7 @@ seedrand((float)time(0));
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart ==1 && (machineType == 0)){ //City start and 6Color
+    if(cityStart == 1 && (machineType == 0)){ //City start and 6Color
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
@@ -920,6 +927,8 @@ seedrand((float)time(0));
   }
   //TOOLCHANGE END
   totalDist = totalDist/1000; //conversion to meters
+  //send paper to front
+  fprintf(gcode, "G0 Y0\n");
   fprintf(gcode,GFOOTER);
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
