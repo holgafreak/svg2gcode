@@ -508,6 +508,7 @@ void help() {
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
+//paperDimensions [X, Y, Z, ?, ?, ?]
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -699,8 +700,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
 
-  if(machineType == 0 || machineType == 2){ //MVP or 6-Color
+  if(machineType == 0){ 6-Color
     shiftX += 306 - paperDimensions[0];
+  } else if (machineType == 2){
+    shiftX += 215.9 - paperDimensions[0]
   }
 
   // shiftX = 0;
@@ -801,7 +804,7 @@ seedrand((float)time(0));
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart ==1 && (machineType == 0)){ //City start and 6Color
+    if(cityStart == 1 && (machineType == 0)){ //City start and 6Color
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
