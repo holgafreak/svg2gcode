@@ -508,7 +508,9 @@ void help() {
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
+//create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
+
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[4]) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -533,8 +535,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float scale = 1; //make this dynamic. //this changes with widthInmm
   float margin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
-  int fitToMaterial =  scaleToMaterial;
-  int centerOnMaterial = centerSvg;
+  //config initialization
+  int fitToMaterial = generationConfig[0]; //scaleToMaterial
+  int centerOnMaterial = generationConfig[1];//centerSvg;
+  int svgRotation = generationConfig[2];
+  int machineType = generationConfig[3]; //machineType
+
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
   int targetTool = 0; //start as 0 so no tool is matched
