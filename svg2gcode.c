@@ -55,6 +55,8 @@
 #define GFOOTER "M5\nM30\n "
 #define GMODE "M4\n"
 
+static int sixColorWidth = 306;
+
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static int numTools = 6;
@@ -508,8 +510,9 @@ void help() {
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
-//paperDimensions [paperX, paperY, xMargin, yMargin, zEngage, penLift]
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int scaleToMaterial, int centerSvg, int machineType) {
+//create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
+
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[4]) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -532,11 +535,17 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 10;
-  float scale = 1; //make this dynamic. //this changes with widthInmm
+  //float scale = 1; //make this dynamic. //this changes with widthInmm
   float margin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
-  int fitToMaterial =  scaleToMaterial;
-  int centerOnMaterial = centerSvg;
+  //config initialization
+  int fitToMaterial = generationConfig[0]; //scaleToMaterial
+  int centerOnMaterial = generationConfig[1];//centerSvg;
+  int svgRotation = generationConfig[2]; //svgRotation * 90 is current degrees of rotation.
+  int machineType = generationConfig[3]; //machineType
+  float centerX = 0;
+  float centerY = 0;
+
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
   int targetTool = 0; //start as 0 so no tool is matched
@@ -605,8 +614,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       break;
     case 'n': numReord = atoi(optarg);
       break;
-    case 's': scale = atof(optarg);
-      break;
+    // case 's': scale = atof(optarg);
+    //   break;
     case 't': tol = atof(optarg);
       break;
     case 'F':
@@ -652,72 +661,55 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   height = g_image->height;
   printf("Image width x height: %f x %f\n", width, height);
 
-  //bounding box dimensions of drawn svg elements. Toggling between these different settings of w and h may be the change we want.
-  //px * width/height. This is the width x height of the svg. Why are paths being drawn to this size?
-  w = width;
-  h = height; 
-  printf("w x h: %f x %f\n", w, h);
-
   //scaling + fitting operations.
-  float drawSpaceWidth = paperDimensions[0]-(2*margin); //space available on paper for drawing.
-  float drawSpaceHeight = paperDimensions[1]-(2*ymargin);
-  float drawingWidth = w; //size of drawing scaled. Just setting as placeholder for now.
-  float drawingHeight = h;
+  // Variables
+  float drawSpaceWidth = paperDimensions[0] - (2*margin);
+  float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
+  float scale, drawingWidth, drawingHeight;
+  int swap_dim = (svgRotation == 1 || svgRotation == 3);
 
-  //Scale to material with default margin of 1"
+  // Swap width and height if necessary
+  if (swap_dim) {
+      float temp = width;
+      width = height;
+      height = temp;
+  }
+  drawingWidth = width;
+  drawingHeight = height;
 
-  if((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight)){ //if larger than material, force scale to material
-    printf("SVG larger than material, forcing scale to material\n");
-    fitToMaterial = 1;
+  // Determine if fitting to material is necessary
+  fitToMaterial = ((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight) || fitToMaterial);
+
+  // If fitting to material, calculate scale and new drawing dimensions
+  if (fitToMaterial) {
+      float materialRatio = drawSpaceWidth / drawSpaceHeight;
+      float svgRatio = width / height;
+      scale = (materialRatio > svgRatio) ? (drawSpaceHeight / height) : (drawSpaceWidth / width);
+      drawingWidth = width * scale;
+      drawingHeight = height * scale;
+      shiftX = margin;
+      shiftY = ymargin;
   }
 
-  if(fitToMaterial == 1){ //this can also increase the size. This is the key difference between fittomaterial == 1 and else {}
-    printf("Fitting to material size\n");
-
-    //need to identify the bounding dimension.
-    float materialRatio = drawSpaceWidth/drawSpaceHeight;
-    float svgRatio = w/h;
-    //if materialRatio > svgRatio, Y is the bounding dimension. if material ratio is less than svgRatio, X is the bounding dimension.
-    if(materialRatio > svgRatio){ //if y is bounding
-      printf("Scaling to drawSpaceHeight = %f \n",drawSpaceHeight);
-      scale = drawSpaceHeight/h;
-      drawingWidth = w*scale;
-      drawingHeight = h*scale;
-      printf("scale = %f \n", drawSpaceWidth);
-    } else if (svgRatio >= materialRatio){ //if x is bounding or equal
-      printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
-      scale = drawSpaceWidth/w;
-      drawingHeight = h*scale;
-      drawingWidth = w*scale;
-      printf("scale = %f \n", scale);
-    }
-    shiftX = margin;
-    shiftY = ymargin;
-  }
-  if(centerOnMaterial == 1){ //rethink for based on x or y bound
-    printf("Centering on drawing space\n");
-    float centerX = drawingWidth/2;
-    shiftX = margin + ((drawSpaceWidth/2) - (drawingWidth/2));
-    shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
+  // If centering on material, calculate shift
+  if (centerOnMaterial) {
+      shiftX = margin + ((drawSpaceWidth - drawingWidth) / 2);
+      shiftY = ymargin + ((drawSpaceHeight - drawingHeight) / 2);
   }
 
-  if(machineType == 0){ //6-Color
-    shiftX += 306 - paperDimensions[0];
-  } else if (machineType == 2){
-    shiftX += 215.9 - paperDimensions[0];
+  // Adjust for certain machine types
+  if (machineType == 0) {
+      shiftX += sixColorWidth - paperDimensions[0];
   }
 
-  // shiftX = 0;
-  // shiftY = 0;
+  // Calculate center
+  centerX = shiftX + drawingWidth / 2;
+  centerY = shiftY + drawingHeight / 2;
 
-  printf("ShiftX:%f, ShiftY:%f\n", shiftX, shiftY);
+  // Reset zero offsets
+  zeroX = 0;
+  zeroY = 0;
 
-  fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
-  fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
-  //offsetting by the -min x and miny, which would move it over the amount. Think this is why 
-  //the drawing is not respecting viewbox attributes.
-  zeroX = 0;//-bounds[0];
-  zeroY = 0;//-bounds[1];
 
 #ifdef _WIN32
 seedrand((float)time(0));
@@ -791,6 +783,19 @@ seedrand((float)time(0));
     }
     firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
     firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
+    //ROTATION CODE
+    if(svgRotation > 0){
+      //Apply transformation to center
+      float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
+      float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
+      //Apply rotation
+      float rotationRadians = svgRotation * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
+      float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
+      float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
+      //Transform back to correct drawing location
+      firstx = x = rotatedX + centerX; 
+      firsty = y = rotatedY + centerY;
+    }
     if(flip) {
       firsty = -firsty;
       y = -y;
@@ -877,6 +882,18 @@ seedrand((float)time(0));
           }
           bx = (bezPoints[l].x+zeroX)*scale+shiftX;
           by = (bezPoints[l].y+zeroY)*scale+shiftY;
+
+          //ROTATION FOR bx and by
+          if(svgRotation > 0){
+            //Apply transformation to center
+            float tempBX = bx - centerX;
+            float tempBY = by - centerY;
+            //Apply rotation
+            float rotationRadiansBez = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
+            bx = tempBX * cos(rotationRadiansBez) - tempBY * sin(rotationRadiansBez) + centerX;
+            by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
+          }
+
           if(flip){
              by = -by;
           }
