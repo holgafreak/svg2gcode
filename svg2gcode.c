@@ -662,15 +662,15 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   //bounding box dimensions of drawn svg elements. Toggling between these different settings of w and h may be the change we want.
   //px * width/height. This is the width x height of the svg. Why are paths being drawn to this size?
-  w = width;
-  h = height; 
-  printf("w x h: %f x %f\n", w, h);
-  if(svgRotation == 1 || svgRotation == 3){
-    printf("Swapping width and height\n");
-    int tempW = w;
-    w = h;
-    h = tempW;
-  }
+  // w = width;
+  // h = height; 
+  // printf("w x h: %f x %f\n", w, h);
+  // if(svgRotation == 1 || svgRotation == 3){
+  //   printf("Swapping width and height\n");
+  //   int tempW = w;
+  //   w = h;
+  //   h = tempW;
+  // }
 
   //scaling + fitting operations.
   // Variables
