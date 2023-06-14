@@ -660,18 +660,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   height = g_image->height;
   printf("Image width x height: %f x %f\n", width, height);
 
-  //bounding box dimensions of drawn svg elements. Toggling between these different settings of w and h may be the change we want.
-  //px * width/height. This is the width x height of the svg. Why are paths being drawn to this size?
-  // w = width;
-  // h = height; 
-  // printf("w x h: %f x %f\n", w, h);
-  // if(svgRotation == 1 || svgRotation == 3){
-  //   printf("Swapping width and height\n");
-  //   int tempW = w;
-  //   w = h;
-  //   h = tempW;
-  // }
-
   //scaling + fitting operations.
   // Variables
   float drawSpaceWidth = paperDimensions[0] - (2*margin);
@@ -689,7 +677,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   drawingHeight = height;
 
   // Determine if fitting to material is necessary
-  fitToMaterial = (drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight);
+  fitToMaterial = ((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight) || fitToMaterial);
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (fitToMaterial) {
