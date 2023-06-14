@@ -55,6 +55,8 @@
 #define GFOOTER "M5\nM30\n "
 #define GMODE "M4\n"
 
+static int sixColorWidth = 306;
+
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static int numTools = 6;
@@ -538,8 +540,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //config initialization
   int fitToMaterial = generationConfig[0]; //scaleToMaterial
   int centerOnMaterial = generationConfig[1];//centerSvg;
-  int svgRotation = generationConfig[2];
+  int svgRotation = 3; //generationConfig[2]; Testing for now with rotation = 1
   int machineType = generationConfig[3]; //machineType
+  float centerX = 0;
+  float centerY = 0;
 
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
@@ -661,6 +665,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   w = width;
   h = height; 
   printf("w x h: %f x %f\n", w, h);
+  if(svgRotation == 1 || svgRotation == 3){
+    printf("Swapping width and height\n");
+    int tempW = w;
+    w = h;
+    h = tempW;
+  }
 
   //scaling + fitting operations.
   float drawSpaceWidth = paperDimensions[0]-(2*margin); //space available on paper for drawing.
@@ -687,7 +697,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       scale = drawSpaceHeight/h;
       drawingWidth = w*scale;
       drawingHeight = h*scale;
-      printf("scale = %f \n", drawSpaceWidth);
+      printf("drawSpaceWidth = %f \n", drawSpaceWidth);
     } else if (svgRatio >= materialRatio){ //if x is bounding or equal
       printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
       scale = drawSpaceWidth/w;
@@ -700,19 +710,20 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
   if(centerOnMaterial == 1){ //rethink for based on x or y bound
     printf("Centering on drawing space\n");
-    float centerX = drawingWidth/2;
+    centerX = drawingWidth/2;
     shiftX = margin + ((drawSpaceWidth/2) - (drawingWidth/2));
     shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
   }
 
   if(machineType == 0 || machineType == 2){ //MVP or 6-Color
-    shiftX += 306 - paperDimensions[0];
+    shiftX += sixColorWidth - paperDimensions[0];
   }
 
-  // shiftX = 0;
-  // shiftY = 0;
-
   printf("ShiftX:%f, ShiftY:%f\n", shiftX, shiftY);
+
+  centerX = shiftX + drawingWidth/2;
+  centerY = shiftY + drawingHeight/2;
+  printf("centerX:%f, centerY:%f\n", centerX, centerY);
 
   fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
   fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
@@ -793,6 +804,19 @@ seedrand((float)time(0));
     }
     firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
     firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
+    //ROTATION CODE
+    if(svgRotation > 0){
+      //Apply transformation to center
+      float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
+      float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
+      //Apply rotation
+      float rotationRadians = svgRotation * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
+      float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
+      float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
+      //Transform back to correct drawing location
+      firstx = x = rotatedX + centerX; 
+      firsty = y = rotatedY + centerY;
+    }
     if(flip) {
       firsty = -firsty;
       y = -y;
@@ -879,6 +903,18 @@ seedrand((float)time(0));
           }
           bx = (bezPoints[l].x+zeroX)*scale+shiftX;
           by = (bezPoints[l].y+zeroY)*scale+shiftY;
+
+          //ROTATION FOR bx and by
+          if(svgRotation > 0){
+            //Apply transformation to center
+            float tempBX = bx - centerX;
+            float tempBY = by - centerY;
+            //Apply rotation
+            float rotationRadiansBez = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
+            bx = tempBX * cos(rotationRadiansBez) - tempBY * sin(rotationRadiansBez) + centerX;
+            by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
+          }
+
           if(flip){
              by = -by;
           }
