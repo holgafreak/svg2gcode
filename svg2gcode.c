@@ -534,13 +534,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 10;
-  float scale = 1; //make this dynamic. //this changes with widthInmm
+  //float scale = 1; //make this dynamic. //this changes with widthInmm
   float margin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
   //config initialization
   int fitToMaterial = generationConfig[0]; //scaleToMaterial
   int centerOnMaterial = generationConfig[1];//centerSvg;
-  int svgRotation = 3; //generationConfig[2]; Testing for now with rotation = 1
+  int svgRotation = generationConfig[2]; //svgRotation * 90 is current degrees of rotation.
   int machineType = generationConfig[3]; //machineType
   float centerX = 0;
   float centerY = 0;
@@ -613,8 +613,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       break;
     case 'n': numReord = atoi(optarg);
       break;
-    case 's': scale = atof(optarg);
-      break;
+    // case 's': scale = atof(optarg);
+    //   break;
     case 't': tol = atof(optarg);
       break;
     case 'F':
@@ -673,64 +673,54 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
 
   //scaling + fitting operations.
-  float drawSpaceWidth = paperDimensions[0]-(2*margin); //space available on paper for drawing.
-  float drawSpaceHeight = paperDimensions[1]-(2*ymargin);
-  float drawingWidth = w; //size of drawing scaled. Just setting as placeholder for now.
-  float drawingHeight = h;
+  // Variables
+  float drawSpaceWidth = paperDimensions[0] - (2*margin);
+  float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
+  float scale, drawingWidth, drawingHeight;
+  int swap_dim = (svgRotation == 1 || svgRotation == 3);
 
-  //Scale to material with default margin of 1"
+  // Swap width and height if necessary
+  if (swap_dim) {
+      float temp = width;
+      width = height;
+      height = temp;
+  }
+  drawingWidth = width;
+  drawingHeight = height;
 
-  if((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight)){ //if larger than material, force scale to material
-    printf("SVG larger than material, forcing scale to material\n");
-    fitToMaterial = 1;
+  // Determine if fitting to material is necessary
+  fitToMaterial = (drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight);
+
+  // If fitting to material, calculate scale and new drawing dimensions
+  if (fitToMaterial) {
+      float materialRatio = drawSpaceWidth / drawSpaceHeight;
+      float svgRatio = width / height;
+      scale = (materialRatio > svgRatio) ? (drawSpaceHeight / height) : (drawSpaceWidth / width);
+      drawingWidth = width * scale;
+      drawingHeight = height * scale;
+      shiftX = margin;
+      shiftY = ymargin;
   }
 
-  if(fitToMaterial == 1){ //this can also increase the size. This is the key difference between fittomaterial == 1 and else {}
-    printf("Fitting to material size\n");
-
-    //need to identify the bounding dimension.
-    float materialRatio = drawSpaceWidth/drawSpaceHeight;
-    float svgRatio = w/h;
-    //if materialRatio > svgRatio, Y is the bounding dimension. if material ratio is less than svgRatio, X is the bounding dimension.
-    if(materialRatio > svgRatio){ //if y is bounding
-      printf("Scaling to drawSpaceHeight = %f \n",drawSpaceHeight);
-      scale = drawSpaceHeight/h;
-      drawingWidth = w*scale;
-      drawingHeight = h*scale;
-      printf("drawSpaceWidth = %f \n", drawSpaceWidth);
-    } else if (svgRatio >= materialRatio){ //if x is bounding or equal
-      printf("Scaling to drawSpaceWidth = %f \n",drawSpaceWidth);
-      scale = drawSpaceWidth/w;
-      drawingHeight = h*scale;
-      drawingWidth = w*scale;
-      printf("scale = %f \n", scale);
-    }
-    shiftX = margin;
-    shiftY = ymargin;
-  }
-  if(centerOnMaterial == 1){ //rethink for based on x or y bound
-    printf("Centering on drawing space\n");
-    centerX = drawingWidth/2;
-    shiftX = margin + ((drawSpaceWidth/2) - (drawingWidth/2));
-    shiftY = ymargin + ((drawSpaceHeight/2) - (drawingHeight/2));
+  // If centering on material, calculate shift
+  if (centerOnMaterial) {
+      shiftX = margin + ((drawSpaceWidth - drawingWidth) / 2);
+      shiftY = ymargin + ((drawSpaceHeight - drawingHeight) / 2);
   }
 
-  if(machineType == 0 || machineType == 2){ //MVP or 6-Color
-    shiftX += sixColorWidth - paperDimensions[0];
+  // Adjust for certain machine types
+  if (machineType == 0 || machineType == 2) {
+      shiftX += sixColorWidth - paperDimensions[0];
   }
 
-  printf("ShiftX:%f, ShiftY:%f\n", shiftX, shiftY);
+  // Calculate center
+  centerX = shiftX + drawingWidth / 2;
+  centerY = shiftY + drawingHeight / 2;
 
-  centerX = shiftX + drawingWidth/2;
-  centerY = shiftY + drawingHeight/2;
-  printf("centerX:%f, centerY:%f\n", centerX, centerY);
+  // Reset zero offsets
+  zeroX = 0;
+  zeroY = 0;
 
-  fprintf(stderr,"width  %f w %f scale %f width in mm %f\n",width,w,scale,widthInmm);
-  fprintf(stderr,"height  %f h %f scale %f\n",width,h,scale);
-  //offsetting by the -min x and miny, which would move it over the amount. Think this is why 
-  //the drawing is not respecting viewbox attributes.
-  zeroX = 0;//-bounds[0];
-  zeroY = 0;//-bounds[1];
 
 #ifdef _WIN32
 seedrand((float)time(0));
