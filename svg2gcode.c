@@ -525,6 +525,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //int numTools = 6;
   int npaths;
   int feed = 13000;
+  int zFeed = 3000;
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = paperDimensions[4];
@@ -697,7 +698,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
 
   // Adjust for certain machine types
-  if (machineType == 0 || machineType == 2) {
+  if (machineType == 0) {
       shiftX += sixColorWidth - paperDimensions[0];
   }
 
@@ -758,7 +759,7 @@ seedrand((float)time(0));
     fprintf(gcode,GHEADER,pwr);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G1 Y0 F%i\n", feed);
-      fprintf(gcode, "G1 Y%f F%i\n", -1*paperDimensions[1], feed);
+      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feed);
       fprintf(gcode, "G1 Y0 F%i\n", feed);
     }
     //fprintf(gcode,"G92X0Y0Z0\n");
@@ -809,7 +810,7 @@ seedrand((float)time(0));
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart ==1 && (machineType == 0)){ //City start and 6Color
+    if(cityStart == 1 && (machineType == 0)){ //City start and 6Color
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
         for(int p = 0; p<numTools; p++){
@@ -826,7 +827,7 @@ seedrand((float)time(0));
           //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
           //add pickup and dropoff logic
           fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-          fprintf(gcode, "G1 Z%i F%i\n", 0, feed);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
@@ -841,7 +842,7 @@ seedrand((float)time(0));
           currColor = penList[targetTool].colors[0];
           //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
           fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-          fprintf(gcode, "G1 Z%i F%i\n", 0, feed);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
           fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
           fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
           fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
@@ -852,12 +853,12 @@ seedrand((float)time(0));
     }
     //TOOLCHANGE END
 
-    //fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
+    fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
     fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
     if(cityStart ==1){
-          fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+          fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
           cityStart = 0;
     }
     printed=0;
@@ -916,7 +917,7 @@ seedrand((float)time(0));
           //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
           if(cityStart==1){
-            fprintf(gcode, "G1 Z%f F%d\n",zFloor,feed);
+            fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
             cityStart = 0;
           }
           bxold = bx;
@@ -928,12 +929,12 @@ seedrand((float)time(0));
     }
     if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
-      fprintf(gcode, "G1 Z%f F%d\n",ztraverse,feed);
-      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",firstx,firsty,feed);
+      fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
+      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
       printed = 1;
     }
   }
-  fprintf(gcode, "G1 Z%i F%i\n", 0, feed);
+  fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
   //drop off current tool
   //TOOLCHANGE START
   if(machineType == 0){ //6Color
