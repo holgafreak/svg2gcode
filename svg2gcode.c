@@ -789,7 +789,7 @@ seedrand((float)time(0));
       float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
       float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
       //Apply rotation
-      float rotationRadians = svgRotation * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
+      float rotationRadians = ((4-svgRotation)%4) * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
       float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
       float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
       //Transform back to correct drawing location
