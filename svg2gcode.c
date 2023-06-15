@@ -781,33 +781,6 @@ seedrand((float)time(0));
     if(k >= npaths-1) {
       continue;
     }
-    firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
-    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
-    //ROTATION CODE
-    if(svgRotation > 0){
-      //Apply transformation to center
-      float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
-      float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
-      //Apply rotation
-      float rotationRadians = ((4-svgRotation)%4) * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
-      float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
-      float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
-      //Transform back to correct drawing location
-      firstx = x = rotatedX + centerX; 
-      firsty = y = rotatedY + centerY;
-    }
-    if(flip) {
-      firsty = -firsty;
-      y = -y;
-    } if(x > maxx){
-      maxx = x;
-    } if(x < minx){
-      minx = x;
-    } if(y > maxy){
-      maxy = y;
-    } if(y < miny){
-      miny = y;
-    }
 
     //colorCheck and tracking for TOOLCHANGE
     if(cityStart == 1 && (machineType == 0)){ //City start and 6Color
@@ -852,6 +825,35 @@ seedrand((float)time(0));
       }
     }
     //TOOLCHANGE END
+
+    //WRITING MOVES FOR DRAWING
+    firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
+    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
+    //ROTATION CODE
+    if(svgRotation > 0){
+      //Apply transformation to center
+      float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
+      float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
+      //Apply rotation
+      float rotationRadians = ((4-svgRotation)%4) * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
+      float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
+      float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
+      //Transform back to correct drawing location
+      firstx = x = rotatedX + centerX; 
+      firsty = y = rotatedY + centerY;
+    }
+    if(flip) {
+      firsty = -firsty;
+      y = -y;
+    } if(x > maxx){
+      maxx = x;
+    } if(x < minx){
+      minx = x;
+    } if(y > maxy){
+      maxy = y;
+    } if(y < miny){
+      miny = y;
+    }
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
@@ -933,7 +935,9 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
       printed = 1;
     }
+    //END WRITING MOVES FOR DRAWING SECTION
   }
+
   fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
   //drop off current tool
   //TOOLCHANGE START
