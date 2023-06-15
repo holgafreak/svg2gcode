@@ -526,14 +526,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = paperDimensions[4];
-  float ztraverse = paperDimensions[4] + paperDimensions[5];
+  float ztraverse = paperDimensions[5]; //paperDimensions[4] + paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
   float width = -1;
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
   int numReord = 10;
   //float scale = 1; //make this dynamic. //this changes with widthInmm
-  float margin = paperDimensions[2]; //xmargin around drawn elements in mm
+  float xmargin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
   //config initialization
   int fitToMaterial = generationConfig[0]; //scaleToMaterial
@@ -633,7 +633,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   //scaling + fitting operations.
   // Variables
-  float drawSpaceWidth = paperDimensions[0] - (2*margin);
+  float drawSpaceWidth = paperDimensions[0] - (2*xmargin);
   float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
   float scale, drawingWidth, drawingHeight;
   int swap_dim = (svgRotation == 1 || svgRotation == 3);
@@ -657,13 +657,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       scale = (materialRatio > svgRatio) ? (drawSpaceHeight / height) : (drawSpaceWidth / width);
       drawingWidth = width * scale;
       drawingHeight = height * scale;
-      shiftX = margin;
+      shiftX = xmargin;
       shiftY = ymargin;
   }
 
   // If centering on material, calculate shift
   if (centerOnMaterial) {
-      shiftX = margin + ((drawSpaceWidth - drawingWidth) / 2);
+      shiftX = xmargin + ((drawSpaceWidth - drawingWidth) / 2);
       shiftY = ymargin + ((drawSpaceHeight - drawingHeight) / 2);
   }
 
