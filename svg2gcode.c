@@ -497,14 +497,11 @@ void help() {
   printf("\t-s scale (1.0)\n");
   printf("\t-S 1 scale to material size\n");
   printf("\t-C center on drawing space\n");
-  printf("\t-F flip Y-axis\n");
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
   printf("\t-m machine accuracy (0.1)\n");
   printf("\t-Z z-engage (-1.0)\n");
   printf("\t-B do Bezier curve smoothing\n");
-  printf("\t-T engrave only TSP-path\n");
-  printf("\t-V optmize for Voronoi Stipples\n");
   printf("\t-h this help\n");
   }
 
@@ -557,16 +554,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
   float xold,yold;
-  int flip = 1; //may want to pull out.
   int printed=0;
-  int tsp = 0;
-  int tspFirst = 1;
-  int autoshift = 0;
-  float ashift = 0.;
-  int firstandonly = 2; // first svg
-  int append = 0;
-  int last = 0; // last svg
-  int waitTime = 25;
+
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
   float shiftY = 0;
@@ -591,20 +580,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     switch(ch) {
     case 'P': pwr = atoi(optarg);
       break;
-    case 'D': waitTime=atoi(optarg);
-      dwell = atoi(optarg);
-      break;
-    case 'a': append = 1; firstandonly = 0;
-      break;
-    case 'V': xy = 0;
-      break;
-    xy = 1;
-      break;
     case 'Y': shiftY = atof(optarg); // shift
       break;
     case 'X': shiftX = atof(optarg); // shift
-      break;
-    case 'A':autoshift = 1;
       break;
     case 'm': accuracy=atof(optarg);
       break;
@@ -614,13 +592,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       break;
     case 'n': numReord = atoi(optarg);
       break;
-    // case 's': scale = atof(optarg);
-    //   break;
     case 't': tol = atof(optarg);
       break;
-    // case 'F':
-    //   flip = 1;
-    //   break;
     case 'w': widthInmm = atof(optarg);
       break;
     default: help();
@@ -628,9 +601,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       break;
     }
   }
-  //move above to main
-  if(shiftY != 30. && flip == 1)
-    shiftY = -shiftY;
+
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
   g_image = nsvgParseFromFile(argv[optind],"px",96);
