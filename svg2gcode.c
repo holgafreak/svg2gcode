@@ -618,9 +618,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     //   break;
     case 't': tol = atof(optarg);
       break;
-    case 'F':
-      flip = 1;
-      break;
+    // case 'F':
+    //   flip = 1;
+    //   break;
     case 'w': widthInmm = atof(optarg);
       break;
     default: help();
@@ -842,18 +842,13 @@ seedrand((float)time(0));
       firstx = x = rotatedX + centerX; 
       firsty = y = rotatedY + centerY;
     }
-    if(flip) {
+ 
       firsty = -firsty;
       y = -y;
-    } if(x > maxx){
       maxx = x;
-    } if(x < minx){
       minx = x;
-    } if(y > maxy){
       maxy = y;
-    } if(y < miny){
       miny = y;
-    }
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
@@ -896,21 +891,12 @@ seedrand((float)time(0));
             by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
           }
 
-          if(flip){
-             by = -by;
-          }
-          if(bx > maxx) {
-            maxx = bx;
-          }
-          if(bx < minx) {
-            minx = x;
-          }
-          if(by > maxy) {
-            maxy = by;
-          }
-          if(y < miny){
-            miny = by;
-          }
+          by = -by;
+          maxx = bx;
+          minx = bx;
+          maxy = by;
+          miny = by;
+          
           //printf("Distance before: %f\n", d);
           d = distanceBetweenPoints(bxold, byold, bx, by);
           //printf("Distance after: %f\n", d);
