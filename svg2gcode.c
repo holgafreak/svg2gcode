@@ -554,7 +554,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
   float xold,yold;
-  int printed=0;
 
   float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
@@ -829,7 +828,6 @@ seedrand((float)time(0));
           fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
           cityStart = 0;
     }
-    printed=0;
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
@@ -872,7 +870,6 @@ seedrand((float)time(0));
           d = distanceBetweenPoints(bxold, byold, bx, by);
           //printf("Distance after: %f\n", d);
           totalDist += d;
-          printed = 1;
           //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
           if(cityStart==1){
@@ -890,7 +887,6 @@ seedrand((float)time(0));
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
-      printed = 1;
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
