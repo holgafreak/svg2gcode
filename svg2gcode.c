@@ -87,6 +87,7 @@ typedef struct {
 
 typedef struct {
   int id;
+  int isBez;
   NSVGpaint stroke;
 } City;
 
@@ -230,22 +231,24 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   p=0;
   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
     for(path = shape->paths; path != NULL; path=path->next) {
+      doBez = (path->npts == 4 || path->npts == 8); //need a comprehensive check for if a path is a bezier curve. Toggle doBez to 1 when it isBez.
       cities[i].id = i;
       cities[i].stroke = shape->stroke;
+      cities[i].isBez = doBez;
       //printf("City number %d color = %d\n", i, (shape->stroke.color));
       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
         float *pp = &path->pts[j*2];
         if(j==0) {//add first two points. this is for lines and not bezier paths.
-        points[i].x = pp[0];
-        points[i].y = pp[1];
+          points[i].x = pp[0];
+          points[i].y = pp[1];
 #ifdef DO_HPGL
-        fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
-        fflush(f);
-          } else {
-        fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
-        fflush(f);
+          fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
+          fflush(f);
+            } else {
+          fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
+          fflush(f);
 #endif
-          }
+        }
         if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
@@ -821,9 +824,9 @@ seedrand((float)time(0));
       miny = y;
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
+    fprintf(gcode,"( city %d, color %d, isBez %d)\n", cities[i].id, cities[i].stroke.color, cities[i].isBez);
     fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
     //start of city. want to have first move in a city+lower here.
-    fprintf(gcode,"( city %d, color %d)\n", cities[i].id, cities[i].stroke.color);
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
           cityStart = 0;
@@ -833,55 +836,96 @@ seedrand((float)time(0));
       yold = y;
       first = 1;
       if(paths[j].city == cities[i].id) {
-        bezCount = 0;
-        cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
-        bxold=x;
-        byold=y;
-        for(l=0;l<bezCount;l++) {
-          if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
-            printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
-            continue;
-          }
-          if(bezPoints[l].y > bounds[3]) {
-            printf("bezPoints y %d\n",l);
-            continue;
-          }
-          bx = (bezPoints[l].x+zeroX)*scale+shiftX;
-          by = (bezPoints[l].y+zeroY)*scale+shiftY;
+        doBez = cities[i].isBez;
+        if(doBez) {
+          bezCount = 0;
+          cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
+          bxold=x;
+          byold=y;
+          for(l=0;l<bezCount;l++) {
+            if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
+              printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
+              continue;
+            }
+            if(bezPoints[l].y > bounds[3]) {
+              printf("bezPoints y %d\n",l);
+              continue;
+            }
+            bx = (bezPoints[l].x+zeroX)*scale+shiftX;
+            by = (bezPoints[l].y+zeroY)*scale+shiftY;
 
-          //ROTATION FOR bx and by
-          if(svgRotation > 0){
-            //Apply transformation to center
-            float tempBX = bx - centerX;
-            float tempBY = by - centerY;
-            //Apply rotation
-            float rotationRadiansBez = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
-            bx = tempBX * cos(rotationRadiansBez) - tempBY * sin(rotationRadiansBez) + centerX;
-            by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
-          }
+            //ROTATION FOR bx and by
+            if(svgRotation > 0){
+              //Apply transformation to center
+              float tempBX = bx - centerX;
+              float tempBY = by - centerY;
+              //Apply rotation
+              float rotationRadiansBez = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
+              bx = tempBX * cos(rotationRadiansBez) - tempBY * sin(rotationRadiansBez) + centerX;
+              by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
+            }
 
-          by = -by;
-          maxx = bx;
-          minx = bx;
-          maxy = by;
-          miny = by;
-          
-          //printf("Distance before: %f\n", d);
-          d = distanceBetweenPoints(bxold, byold, bx, by);
-          //printf("Distance after: %f\n", d);
-          totalDist += d;
-          //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-          if(cityStart==1){
-            fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-            cityStart = 0;
+            by = -by;
+            maxx = bx;
+            minx = bx;
+            maxy = by;
+            miny = by;
+            
+            //printf("Distance before: %f\n", d);
+            d = distanceBetweenPoints(bxold, byold, bx, by);
+            //printf("Distance after: %f\n", d);
+            totalDist += d;
+            //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
+            fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
+            if(cityStart==1){
+              fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
+              cityStart = 0;
+            }
+            bxold = bx;
+            byold = by;
           }
-          bxold = bx;
-          byold = by;
+          paths[j].city = -1; //this path has been written
+        } else { // Handle non-Bezier paths here.
+          int pointCount = 2; //paths[j].pointCount; // Assuming this exists or you have a way to get this.
+          for (int l = 0; l < pointCount; l += 2) { // Each point consists of 2 elements: x and y
+              if (l+1 >= pointCount) { // Ensure there's a pair of coordinates
+                  break;
+              }
+              
+              float pointX = (paths[j].points[l] + zeroX) * scale + shiftX;
+              float pointY = (paths[j].points[l+1] + zeroY) * scale + shiftY;
+
+              // Apply the same rotation code as before, if needed.
+              if (svgRotation > 0) {
+                  // Apply transformation to center
+                  float tempPointX = pointX - centerX;
+                  float tempPointY = pointY - centerY;
+                  // Apply rotation
+                  float rotationRadians = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
+                  pointX = tempPointX * cos(rotationRadians) - tempPointY * sin(rotationRadians) + centerX;
+                  pointY = tempPointX * sin(rotationRadians) + tempPointY * cos(rotationRadians) + centerY;
+              }
+
+              pointY = -pointY;
+
+              d = distanceBetweenPoints(xold, yold, pointX, pointY); // Calculate distance
+              totalDist += d; // Add to total distance
+              xold = pointX;
+              yold = pointY;
+
+              // Update bounds
+              if(pointX < minx) minx = pointX;
+              if(pointX > maxx) maxx = pointX;
+              if(pointY < miny) miny = pointY;
+              if(pointY > maxy) maxy = pointY;
+
+              fprintf(gcode, "G1 X%.4f Y%.4f  F%d\n", pointX, pointY, feed);
+          }
+          paths[j].city = -1; // This path has been written
         }
-      paths[j].city = -1; //this path has been written
-      } else
-            break;
+      } else {
+        break;
+      }
     }
     if(paths[j].closed) {
       fprintf(gcode, "( end )\n");
@@ -891,7 +935,7 @@ seedrand((float)time(0));
     //END WRITING MOVES FOR DRAWING SECTION
   }
 
-  fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
   //drop off current tool
   //TOOLCHANGE START
   if(machineType == 0){ //6Color
