@@ -889,9 +889,10 @@ seedrand((float)time(0));
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
     }
     //END WRITING MOVES FOR DRAWING SECTION
+    fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
   }
 
-  fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
   //drop off current tool
   //TOOLCHANGE START
   if(machineType == 0){ //6Color
