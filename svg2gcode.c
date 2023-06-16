@@ -214,16 +214,12 @@ static int pcomp(const void* a, const void* b) {
 }
 
 // get all paths and paths into cities
-static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) { //Calculating ToolPath's. Not actual gcode paths.
   struct NSVGshape* shape;
   struct NSVGpath* path;
   FILE *f;
   int i,j,k,l,p,b,bezCount;
   SVGPoint* pts;
-#ifdef DO_HPGL
-  f=fopen("test.hpgl","w");
-  fprintf(f,"IN;SP1;");
-#endif
   bezCount=0;
   i=0;
   k=0;
@@ -231,7 +227,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   p=0;
   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
     for(path = shape->paths; path != NULL; path=path->next) {
-      doBez = (path->npts == 4 || path->npts == 8); //need a comprehensive check for if a path is a bezier curve. Toggle doBez to 1 when it isBez.
+      doBez = (path->npts > 2); //== 4 || path->npts == 8); //need a comprehensive check for if a path is a bezier curve. Toggle doBez to 1 when it isBez.
       cities[i].id = i;
       cities[i].stroke = shape->stroke;
       cities[i].isBez = doBez;
@@ -241,13 +237,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
         if(j==0) {//add first two points. this is for lines and not bezier paths.
           points[i].x = pp[0];
           points[i].y = pp[1];
-#ifdef DO_HPGL
-          fprintf(f,"PU%d,%d;",(int)pp[0],(int)pp[1]);
-          fflush(f);
-            } else {
-          fprintf(f,"PD%d,%d;",(int)pp[0],(int)pp[1]);
-          fflush(f);
-#endif
         }
         if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
           bezCount++;
@@ -264,24 +253,16 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
         paths[k].closed = path->closed;
         paths[k].city = i; //assign points in this path/shape to city i.
         k++;
-       }
-     cont:
+      }
+      cont:
        if(k>pointsCount) {
-     printf("error k > \n");
-#ifdef DO_HPGL
-     fprintf(f,"PU0,0;\n");
-     fclose(f);
-#endif
-     *npaths = 0;
-     return;
+        printf("error k > \n");
+        *npaths = 0;
+        return;
        }
        if(i>pathCount) {
-     printf("error i > \n");
-#ifdef DO_HPGL
-     fprintf(f,"PU0,0;\n");
-     fclose(f);
-#endif
-     exit(-1);
+        printf("error i > \n");
+        exit(-1);
        }
        i++; //setting up cities
      }
@@ -289,10 +270,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   }
   printf("total paths %d, total points %d\n",i,k);
   *npaths = k;
-#ifdef DO_HPGL
-  fprintf(f,"PU0,0;\n");
-  fclose(f);
-#endif
 }
 
 //submethod for mergeSort
@@ -518,7 +495,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   struct NSVGshape *shape1,*shape2;
   struct NSVGpath *path1,*path2;
   SVGPoint* points;
-  ToolPath* paths;
+  ToolPath* toolPaths;
   City *cities;
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
@@ -697,15 +674,15 @@ seedrand((float)time(0));
   printf("paths %d points %d\n",pathCount, pointsCount);
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
-  paths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
+  toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   cities = (City*)malloc(pathCount*sizeof(City));
   memset(points, 0, pathCount*sizeof(SVGPoint));
-  memset(paths, 0, pointsCount*sizeof(ToolPath));
+  memset(toolPaths, 0, pointsCount*sizeof(ToolPath));
   memset(cities, 0, pathCount*sizeof(City));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
   npaths = 0;
-  calcPaths(points, paths, &npaths, cities);
+  calcPaths(points, toolPaths, &npaths, cities);
 
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
@@ -745,9 +722,9 @@ seedrand((float)time(0));
     cityStart=1;
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
-      if(paths[k].city == -1){ //means already written
+      if(toolPaths[k].city == -1){ //means already written
           continue;
-      } else if(paths[k].city == cities[i].id) {
+      } else if(toolPaths[k].city == cities[i].id) {
         break;
       }
     }
@@ -800,13 +777,13 @@ seedrand((float)time(0));
     //TOOLCHANGE END
 
     //WRITING MOVES FOR DRAWING
-    firstx = x = (paths[k].points[0]+zeroX)*scale+shiftX;
-    firsty = y =  (paths[k].points[1]+zeroY)*scale+shiftY;
+    firstx = x = (toolPaths[k].points[0]+zeroX)*scale+shiftX;
+    firsty = y =  (toolPaths[k].points[1]+zeroY)*scale+shiftY;
     //ROTATION CODE
     if(svgRotation > 0){
       //Apply transformation to center
-      float tempX = (paths[k].points[0]+zeroX)*scale+shiftX - centerX;
-      float tempY = (paths[k].points[1]+zeroY)*scale+shiftY - centerY;
+      float tempX = (toolPaths[k].points[0]+zeroX)*scale+shiftX - centerX;
+      float tempY = (toolPaths[k].points[1]+zeroY)*scale+shiftY - centerY;
       //Apply rotation
       float rotationRadians = ((4-svgRotation)%4) * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
       float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
@@ -835,11 +812,11 @@ seedrand((float)time(0));
       xold = x;
       yold = y;
       first = 1;
-      if(paths[j].city == cities[i].id) {
+      if(toolPaths[j].city == cities[i].id) {
         doBez = cities[i].isBez;
         if(doBez) {
           bezCount = 0;
-          cubicBez(paths[j].points[0],paths[j].points[1],paths[j].points[2],paths[j].points[3],paths[j].points[4],paths[j].points[5],paths[j].points[6],paths[j].points[7],tol,0);
+          cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, 0);
           bxold=x;
           byold=y;
           for(l=0;l<bezCount;l++) {
@@ -884,7 +861,7 @@ seedrand((float)time(0));
             bxold = bx;
             byold = by;
           }
-          paths[j].city = -1; //this path has been written
+          toolPaths[j].city = -1; //this path has been written
         } else { // Handle non-Bezier paths here.
           int pointCount = 2; //paths[j].pointCount; // Assuming this exists or you have a way to get this.
           for (int l = 0; l < pointCount; l += 2) { // Each point consists of 2 elements: x and y
@@ -892,8 +869,8 @@ seedrand((float)time(0));
                   break;
               }
               
-              float pointX = (paths[j].points[l] + zeroX) * scale + shiftX;
-              float pointY = (paths[j].points[l+1] + zeroY) * scale + shiftY;
+              float pointX = (toolPaths[j].points[l] + zeroX) * scale + shiftX;
+              float pointY = (toolPaths[j].points[l+1] + zeroY) * scale + shiftY;
 
               // Apply the same rotation code as before, if needed.
               if (svgRotation > 0) {
@@ -921,13 +898,13 @@ seedrand((float)time(0));
 
               fprintf(gcode, "G1 X%.4f Y%.4f  F%d\n", pointX, pointY, feed);
           }
-          paths[j].city = -1; // This path has been written
+          toolPaths[j].city = -1; // This path has been written
         }
       } else {
         break;
       }
     }
-    if(paths[j].closed) {
+    if(toolPaths[j].closed) {
       fprintf(gcode, "( end )\n");
       fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
@@ -954,7 +931,7 @@ seedrand((float)time(0));
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
   fclose(gcode);
   free(points);
-  free(paths);
+  free(toolPaths);
   free(cities);
   nsvgDelete(g_image);
   free(penList);
