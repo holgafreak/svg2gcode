@@ -555,7 +555,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   double d;
   float xold,yold;
 
-  float maxx = -1000.,minx=1000.,maxy = -1000.,miny=1000.,zmax = -1000.,zmin = 1000;
+  float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
   float shiftY = 0;
   float yMountOffset = 0; //mm
