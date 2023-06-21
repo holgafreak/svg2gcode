@@ -62,11 +62,12 @@ static float maxf(float a, float b) { return a > b ? a : b; }
 static int numTools = 6;
 static float bounds[4];
 static int pathCount,pointsCount,shapeCount;
-static int doBez = 1;
 static struct NSVGimage* g_image = NULL;
 int numCompOut = 0;
 int pathCountOut = 0;
 int pointCountOut = 0;
+
+#define maxBez 128 //64;
 
 typedef struct {
   float x;
@@ -90,7 +91,7 @@ typedef struct {
   NSVGpaint stroke;
 } City;
 
-static SVGPoint bezPoints[64];
+SVGPoint bezPoints[maxBez];
 static SVGPoint first,last;
 static int bezCount = 0;
 #ifdef _WIN32
@@ -189,9 +190,9 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     bezPoints[bezCount].x = x4;
     bezPoints[bezCount].y = y4;
     bezCount++;
-    if(bezCount > 63) {
+    if(bezCount >= maxBez) {
       printf("!bez count\n");
-      bezCount = 63;
+      bezCount = maxBez;
     }
   }
 }
@@ -223,6 +224,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
   f=fopen("test.hpgl","w");
   fprintf(f,"IN;SP1;");
 #endif
+<<<<<<< Updated upstream
   bezCount=0;
   i=0;
   k=0;
@@ -258,6 +260,29 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *citi
           paths[k].points[2] = pp[0];
           paths[k].points[3] = pp[1];
         }
+=======
+
+  for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
+#ifdef DEBUG_OUTPUT
+    fprintf(debug, "Shape num :%d\n", shapeCount);
+#endif
+    for (path = shape->paths; path != NULL; path = path->next) {
+      cities[i].id = i;
+      cities[i].stroke = shape->stroke;
+#ifdef DEBUG_OUTPUT
+      fprintf(debug, "  City number %d, Npts:%d ,color = %d\n", i, path->npts, shape->stroke.color);
+#endif
+      for (j = 0; j < path->npts - 1; j += 3) {
+        float* pp = &path->pts[j * 2];
+        if (j == 0) {
+            points[i].x = pp[0];
+            points[i].y = pp[1];
+        }
+        bezCount++;
+        for (b = 0; b < 8; b++) {
+          paths[k].points[b] = pp[b];
+        }
+>>>>>>> Stashed changes
         paths[k].closed = path->closed;
         paths[k].city = i; //assign points in this path/shape to city i.
         k++;
