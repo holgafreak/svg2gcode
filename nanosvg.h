@@ -132,7 +132,7 @@ typedef struct NSVGshape
 	float opacity;				// Opacity of the shape.
 	float strokeWidth;			// Stroke width (scaled)
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
-	NSVGpath* paths;			// Linked list of paths in the image.
+	NSVGpath* paths;			// Linked list of paths in the shape.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 } NSVGshape;
 
