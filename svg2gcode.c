@@ -215,65 +215,6 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-// get all paths and paths into cities
-// static void calcPaths(SVGPoint* points, ToolPath* paths, int *npaths, City *cities) { //Calculating ToolPath's. Not actual gcode paths.
-//   struct NSVGshape* shape;
-//   struct NSVGpath* path;
-//   FILE *f;
-//   int i,j,k,l,p,b,bezCount;
-//   SVGPoint* pts;
-//   bezCount=0;
-//   i=0;
-//   k=0;
-//   j=0;
-//   p=0;
-//   for(shape = g_image->shapes; shape != NULL; shape=shape->next) {
-//     for(path = shape->paths; path != NULL; path=path->next) {
-//       doBez = (path->npts > 2); //== 4 || path->npts == 8); //need a comprehensive check for if a path is a bezier curve. Toggle doBez to 1 when it isBez.
-//       cities[i].id = i;
-//       cities[i].stroke = shape->stroke;
-//       cities[i].isBez = doBez;
-//       //printf("City number %d color = %d\n", i, (shape->stroke.color));
-//       for(j=0;j<path->npts-1;(doBez ? j+=3 : j++)) {
-//         float *pp = &path->pts[j*2];
-//         if(j==0) {//add first two points. this is for lines and not bezier paths.
-//           points[i].x = pp[0];
-//           points[i].y = pp[1];
-//         }
-//         if(doBez) { //if we are doing bezier points, this will be reached and add the bezier points.
-//           bezCount++;
-//           //printf("DoBez in calcPaths. Bez#%d\n", bezCount);
-//           for(b=0;b<8;b++){
-//             paths[k].points[b]=pp[b];
-//           }
-//         } else {
-//           paths[k].points[0] = pp[0];
-//           paths[k].points[1] = pp[1];
-//           paths[k].points[2] = pp[0];
-//           paths[k].points[3] = pp[1];
-//         }
-//         paths[k].closed = path->closed;
-//         paths[k].city = i; //assign points in this path/shape to city i.
-//         k++;
-//       }
-//       cont:
-//        if(k>pointsCount) {
-//         printf("error k > \n");
-//         *npaths = 0;
-//         return;
-//        }
-//        if(i>pathCount) {
-//         printf("error i > \n");
-//         exit(-1);
-//        }
-//        i++; //setting up cities
-//      }
-//      j++;
-//   }
-//   printf("total paths %d, total points %d\n",i,k);
-//   *npaths = k;
-// }
-
 #include <stdio.h>
 
 static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* cities, FILE* debug) {
