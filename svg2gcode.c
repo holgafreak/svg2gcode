@@ -39,6 +39,7 @@
 #include <string.h>
 #include <float.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include "svg2gcode.h"
@@ -90,7 +91,6 @@ typedef struct {
 
 typedef struct {
   int id;
-  int isBez;
   NSVGpaint stroke;
 } City;
 
@@ -206,7 +206,6 @@ static void cubicBez(float x1, float y1, float x2, float y2,
 #define RANDOM() (drand48())
 #endif
 
-
 static int pcomp(const void* a, const void* b) {
   SVGPoint* ap = (SVGPoint*)a;
   SVGPoint* bp = (SVGPoint*)b;
@@ -215,8 +214,6 @@ static int pcomp(const void* a, const void* b) {
   }
   return -1;
 }
-
-#include <stdio.h>
 
 static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* cities, FILE* debug) {
   struct NSVGshape* shape;
@@ -239,32 +236,21 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* citi
     fprintf(debug, "Shape num :%d\n", shapeCount);
 #endif
     for (path = shape->paths; path != NULL; path = path->next) {
-      doBez = 1;//((path->npts) > 4);
       cities[i].id = i;
       cities[i].stroke = shape->stroke;
-      cities[i].isBez = doBez;
-
 #ifdef DEBUG_OUTPUT
-      fprintf(debug, "  City number %d, Npts:%d ,color = %d, isBez = %d\n", i, path->npts, shape->stroke.color, doBez);
+      fprintf(debug, "  City number %d, Npts:%d ,color = %d\n", i, path->npts, shape->stroke.color);
 #endif
-
-      for (j = 0; j < path->npts - 1; (doBez ? j += 3 : j++)) {
+      for (j = 0; j < path->npts - 1; j += 3) {
         float* pp = &path->pts[j * 2];
         if (j == 0) {
             points[i].x = pp[0];
             points[i].y = pp[1];
         }
-      if (doBez) {
         bezCount++;
         for (b = 0; b < 8; b++) {
           paths[k].points[b] = pp[b];
         }
-      } else {
-        paths[k].points[0] = pp[0];
-        paths[k].points[1] = pp[1];
-        paths[k].points[2] = pp[0];
-        paths[k].points[3] = pp[1];
-      }
         paths[k].closed = path->closed;
         paths[k].city = i;
         k++;
@@ -498,7 +484,6 @@ void help() {
   printf("\t-C center on drawing space\n");
   printf("\t-w final width in mm\n");
   printf("\t-t Bezier tolerance (0.5)\n");
-  printf("\t-m machine accuracy (0.1)\n");
   printf("\t-Z z-engage (-1.0)\n");
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-h this help\n");
@@ -548,8 +533,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
   float toolChangePos = -51.5;
-  float tol = 1; //smaller is better
-  float accuracy = 0.05; //smaller is better
+  float tol = 1; //In mm. Tolerance of x mm.
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
   float xold,yold;
@@ -582,8 +566,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     case 'Y': shiftY = atof(optarg); // shift
       break;
     case 'X': shiftX = atof(optarg); // shift
-      break;
-    case 'm': accuracy=atof(optarg);
       break;
     case 'h': help();
       break;
@@ -760,12 +742,6 @@ seedrand((float)time(0));
   for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
 #ifdef DEBUG_OUTPUT
     fprintf(printOut, "City %d at i:%d\n", cities[i].id, i);
-    // for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
-    //   if(toolPaths[k].city == cities[i].id) {
-    //     fprintf(printOut, "   ToolPath: %d, City: %d\n", k, cities[i].id);
-    //     fprintf(printOut, "     Points:Cpx1:%f, Cpy1:%f, Cpx2:%f, Cpy2:%f, X1:%f, Y1:%f, X2:%f, Y2:%f\n", toolPaths[k].points[0], toolPaths[k].points[1], toolPaths[k].points[2], toolPaths[k].points[3], toolPaths[k].points[4], toolPaths[k].points[5], toolPaths[k].points[6], toolPaths[k].points[7]);
-    //   }
-    // }
 #endif
     cityStart=1;
     for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
