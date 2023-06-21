@@ -903,6 +903,8 @@ seedrand((float)time(0));
   }
   //TOOLCHANGE END
   totalDist = totalDist/1000; //conversion to meters
+  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+
   //send paper to front
   fprintf(gcode, "G0 Y0\n");
   fprintf(gcode,GFOOTER);
