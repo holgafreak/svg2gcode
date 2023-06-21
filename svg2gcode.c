@@ -814,7 +814,7 @@ seedrand((float)time(0));
       float tempX = (toolPaths[k].points[0]+zeroX)*scale+shiftX - centerX;
       float tempY = (toolPaths[k].points[1]+zeroY)*scale+shiftY - centerY;
       //Apply rotation
-      float rotationRadians = ((4-svgRotation)%4) * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
+      float rotationRadians = svgRotation * M_PI / 2.0; // assuming svgRotation is in {0, 1, 2, 3}
       float rotatedX = tempX * cos(rotationRadians) - tempY * sin(rotationRadians);
       float rotatedY = tempX * sin(rotationRadians) + tempY * cos(rotationRadians);
       //Transform back to correct drawing location
@@ -868,19 +868,17 @@ seedrand((float)time(0));
             float rotationRadiansBez = svgRotation * M_PI / 2.0; // as svgRotation is in {0, 1, 2, 3}
             bx = tempBX * cos(rotationRadiansBez) - tempBY * sin(rotationRadiansBez) + centerX;
             by = tempBX * sin(rotationRadiansBez) + tempBY * cos(rotationRadiansBez) + centerY;
-           }
+          }
 
           by = -by;
           maxx = bx;
           minx = bx;
           maxy = by;
-           miny = by;
-            
-          //printf("Distance before: %f\n", d);
+          miny = by;
+
           d = distanceBetweenPoints(bxold, byold, bx, by);
-          //printf("Distance after: %f\n", d);
           totalDist += d;
-          //fprintf(gcode, "City:%d at i:%d=  ", cities[i].id, i);
+
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
           if(cityStart==1){
             fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
@@ -888,7 +886,6 @@ seedrand((float)time(0));
           }
           bxold = bx;
           byold = by;
-          //toolPaths[j].city = -1; //this path has been written
         } 
         toolPaths[j].city = -1; // This path has been written
       } else {
