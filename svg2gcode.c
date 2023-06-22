@@ -408,18 +408,14 @@ int colorComp(const City * a, const City * b) {
 
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
 //reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* penList) {
+static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* penList, int quality) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
   City temp;
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
-  //printf("Path count = %i\n", pathCount);
-  int numComp = floor(sqrt(pointsCount));
-  //int numComp = 10;
-  //printf("numComp = %i\n",numComp);
+  int numComp = floor(sqrt(pointsCount) * (quality+1));
   for(i=0;i<numComp*pathCount;i++) {
-    //printf("Reorder i = %i\n", i);
     indexA = (int)(RANDOM()*(pathCount-2));
     indexB = (int)(RANDOM()*(pathCount-2));
     if(abs(indexB-indexA) < 2){
@@ -501,7 +497,7 @@ void help() {
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
 //create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[4]) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
   struct NSVGshape *shape1,*shape2;
@@ -513,8 +509,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
   //int numTools = 6;
   int npaths;
-  int feed = 13000;
-  int zFeed = 3000;
+  int quality = generationConfig[8]; //0, 1, 2, low, med, high.
+
+
+
+  int feed = generationConfig[5]; //need to add some logic on a per move basis on line slope to interp between x and y specific feedrates.
+  int zFeed = generationConfig[7];
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = paperDimensions[4];
@@ -523,7 +523,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float height =-1;
   char xy = 1;
   float w,h,widthInmm,heightInmm = -1.;
-  int numReord = 10;
   //float scale = 1; //make this dynamic. //this changes with widthInmm
   float xmargin = paperDimensions[2]; //xmargin around drawn elements in mm
   float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
@@ -541,7 +540,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
   float toolChangePos = -51.5;
-  float tol = .25; //In mm. Tolerance of x mm.
+  float tol; //In mm. Tolerance of x mm.
+  int numReord; //Tol and numReord configured based on quality later in method.
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
   float xold,yold;
@@ -558,8 +558,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int ch;
   int dwell = -1;
   char gbuff[128];
-  printf("v0.0001 8.11.2020\n");
-  //seed48(NULL);
 
   printf("Argc:%d\n", argc);
 
@@ -597,6 +595,17 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
+  }
+
+  if(quality == 2){
+    tol = 0.25;
+    numReord = 20;
+  } else if (quality == 1){
+    tol = 0.5;
+    numReord = 10;
+  } else {
+    tol = 1;
+    numReord = 10;
   }
 
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
@@ -702,7 +711,7 @@ seedrand((float)time(0));
 #endif
   printf("Reorder with numCities: %d\n",pathCount);
   for(k=0;k<numReord;k++) {
-    reorder(points, pathCount, xy, cities, penList);
+    reorder(points, pathCount, xy, cities, penList, quality);
     printf("%d... ",k);
     fflush(stdout);
   }
