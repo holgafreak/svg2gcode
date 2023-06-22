@@ -95,6 +95,7 @@ typedef struct {
 SVGPoint bezPoints[maxBez];
 static SVGPoint first,last;
 static int bezCount = 0;
+int collinear = 0;
 #ifdef _WIN32
 
 static uint64_t seed;
@@ -184,6 +185,13 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   y234 = (y23+y34)*0.5f;
   x1234 = (x123+x234)*0.5f;
   y1234 = (y123+y234)*0.5f;
+
+  float crossProduct1 = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
+  float crossProduct2 = (x2 - x1) * (y4 - y1) - (y2 - y1) * (x4 - x1);
+  if (fabs(crossProduct1) == 0 && fabs(crossProduct2) == 0) {
+    // The curve is a straight line
+    collinear = 1;
+  }
 
   d = distPtSeg(x1234, y1234, x1,y1, x4,y4);
   if (d > tol*tol) {
@@ -830,10 +838,10 @@ seedrand((float)time(0));
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
     fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
     //start of city. want to have first move in a city+lower here.
-    if(cityStart ==1){
+    //if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
           cityStart = 0;
-    }
+    //}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
@@ -843,12 +851,13 @@ seedrand((float)time(0));
         //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
         bezCount = 0;
         level = 0;
+        collinear = 0;
         cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
         bxold=x;
         byold=y;
 
-        //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile.
-
+        //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile. Arc weld on bezCount > 1?
+        fprintf(gcode, "Toolpath:%d, collinear:%d, BezCount:%d\n", j, collinear, bezCount);
         for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
             printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
@@ -882,10 +891,10 @@ seedrand((float)time(0));
           totalDist += d;
 
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-          if(cityStart==1){
-            fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-            cityStart = 0;
-          }
+          // if(cityStart==1){
+          //   fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
+          //   cityStart = 0;
+          // }
           bxold = bx;
           byold = by;
         } 
@@ -906,19 +915,15 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 Z%f F%i\n", 0, zFeed);
   }
   //drop off current tool
-  //TOOLCHANGE START
   if(machineType == 0){ //6Color
     fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
     fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
     fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
     fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   }
-  //TOOLCHANGE END
-  totalDist = totalDist/1000; //conversion to meters
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
 
+  totalDist = totalDist/1000; //conversion to meters
   //send paper to front
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
   fprintf(gcode, "G0 Y0\n");
   fprintf(gcode,GFOOTER);
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
