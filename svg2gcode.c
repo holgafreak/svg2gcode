@@ -46,9 +46,9 @@
 #include <math.h>
 
 //#define DEBUG_OUTPUT
+#define BTSVG
+#define maxBez 128 //64;
 
-//#define TESTRNG // remove if on linux or osx
-//#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 #define GHEADER "G90\nG0 M3 S%d\n" //G92 X0 Y0\n //add here your specific G-codes
@@ -69,8 +69,6 @@ static struct NSVGimage* g_image = NULL;
 int numCompOut = 0;
 int pathCountOut = 0;
 int pointCountOut = 0;
-
-#define maxBez 128 //64;
 
 typedef struct {
   float x;
@@ -97,6 +95,7 @@ typedef struct {
 SVGPoint bezPoints[maxBez];
 static SVGPoint first,last;
 static int bezCount = 0;
+int collinear = 0;
 #ifdef _WIN32
 
 static uint64_t seed;
@@ -170,8 +169,10 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   float x12,y12,x23,y23,x34,y34,x123,y123,x234,y234,x1234,y1234;
   float d;
 
-  if (level > 12) return;
-
+  if (level > 12) {
+    printf("cubicBez > lvl 12");
+    return;
+  }
   x12 = (x1+x2)*0.5f;
   y12 = (y1+y2)*0.5f;
   x23 = (x2+x3)*0.5f;
@@ -185,12 +186,19 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   x1234 = (x123+x234)*0.5f;
   y1234 = (y123+y234)*0.5f;
 
+  float crossProduct1 = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
+  float crossProduct2 = (x2 - x1) * (y4 - y1) - (y2 - y1) * (x4 - x1);
+  if (fabs(crossProduct1) == 0 && fabs(crossProduct2) == 0) {
+    // The curve is a straight line
+    collinear = 1;
+  }
+
   d = distPtSeg(x1234, y1234, x1,y1, x4,y4);
   if (d > tol*tol) {
     cubicBez(x1,y1, x12,y12, x123,y123, x1234,y1234, tol, level+1);
     cubicBez(x1234,y1234, x234,y234, x34,y34, x4,y4, tol, level+1);
   } else {
-    bezPoints[bezCount].x = x4;
+    bezPoints[bezCount].x = x4; //number of points in a given curve will be bezCount.
     bezPoints[bezCount].y = y4;
     bezCount++;
     if(bezCount >= maxBez) {
@@ -199,7 +207,7 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     }
   }
 }
-//#define TESTRNG
+
 #ifdef _WIN32 //win doesn't have good RNG
 #define RANDOM() drnd31() //((double)rand()/(double)RAND_MAX)
 #else //OSX LINUX much faster than win
@@ -606,15 +614,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("\tp%d=%d\n",c,penList[c].count);
   }
 
-  //Toggle bounds vs width maybe?
-
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
   printf("Image width x height: %f x %f\n", width, height);
 
   //scaling + fitting operations.
-  // Variables
   float drawSpaceWidth = paperDimensions[0] - (2*xmargin);
   float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
   float scale, drawingWidth, drawingHeight;
@@ -821,33 +826,39 @@ seedrand((float)time(0));
       firstx = x = rotatedX + centerX; 
       firsty = y = rotatedY + centerY;
     }
- 
-      firsty = -firsty;
-      y = -y;
-      maxx = x;
-      minx = x;
-      maxy = y;
-      miny = y;
+
+    firsty = -firsty;
+    y = -y;
+    maxx = x;
+    minx = x;
+    maxy = y;
+    miny = y;
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
     fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
     //start of city. want to have first move in a city+lower here.
-    if(cityStart ==1){
+    //if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
           cityStart = 0;
-    }
+    //}
     for(j=k;j<npaths;j++) {
       xold = x;
       yold = y;
       first = 1;
+      int level;
       if(toolPaths[j].city == cities[i].id) {
         //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
         bezCount = 0;
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, 0);
+        level = 0;
+        collinear = 0;
+        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
         bxold=x;
         byold=y;
-        for(l=0;l<bezCount;l++) {
+
+        //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile. Arc weld on bezCount > 1?
+        //fprintf(gcode, "( Toolpath:%d, collinear:%d, BezCount:%d\n )", j, collinear, bezCount);
+        for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
             printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
             continue;
@@ -880,10 +891,10 @@ seedrand((float)time(0));
           totalDist += d;
 
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-          if(cityStart==1){
-            fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-            cityStart = 0;
-          }
+          // if(cityStart==1){
+          //   fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
+          //   cityStart = 0;
+          // }
           bxold = bx;
           byold = by;
         } 
@@ -898,22 +909,21 @@ seedrand((float)time(0));
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
-
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+  if(machineType == 1){
+    fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+  } else if (machineType == 0 || machineType == 2){
+    fprintf(gcode, "G1 Z%f F%i\n", 0, zFeed);
+  }
   //drop off current tool
-  //TOOLCHANGE START
   if(machineType == 0){ //6Color
     fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
     fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
     fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
     fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   }
-  //TOOLCHANGE END
-  totalDist = totalDist/1000; //conversion to meters
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
 
+  totalDist = totalDist/1000; //conversion to meters
   //send paper to front
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
   fprintf(gcode, "G0 Y0\n");
   fprintf(gcode,GFOOTER);
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
@@ -923,8 +933,8 @@ seedrand((float)time(0));
   free(points);
   free(toolPaths);
   free(cities);
-  nsvgDelete(g_image);
   free(penList);
+  nsvgDelete(g_image);
   //send a signal to qml that the gcode is done
   
 #ifdef DEBUG_OUTPUT
@@ -935,7 +945,6 @@ seedrand((float)time(0));
   return 0;
 }
 
-#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
