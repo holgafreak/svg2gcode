@@ -857,7 +857,7 @@ seedrand((float)time(0));
         byold=y;
 
         //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile. Arc weld on bezCount > 1?
-        fprintf(gcode, "Toolpath:%d, collinear:%d, BezCount:%d\n", j, collinear, bezCount);
+        //fprintf(gcode, "( Toolpath:%d, collinear:%d, BezCount:%d\n )", j, collinear, bezCount);
         for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
             printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
