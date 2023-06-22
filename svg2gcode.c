@@ -46,9 +46,9 @@
 #include <math.h>
 
 //#define DEBUG_OUTPUT
+#define BTSVG
+#define maxBez 128 //64;
 
-//#define TESTRNG // remove if on linux or osx
-//#define DO_HPGL //remove comment if you want to get a HPGL-code
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 #define GHEADER "G90\nG0 M3 S%d\n" //G92 X0 Y0\n //add here your specific G-codes
@@ -69,8 +69,6 @@ static struct NSVGimage* g_image = NULL;
 int numCompOut = 0;
 int pathCountOut = 0;
 int pointCountOut = 0;
-
-#define maxBez 128 //64;
 
 typedef struct {
   float x;
@@ -170,8 +168,10 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   float x12,y12,x23,y23,x34,y34,x123,y123,x234,y234,x1234,y1234;
   float d;
 
-  if (level > 12) return;
-
+  if (level > 12) {
+    printf("cubicBez > lvl 12");
+    return;
+  }
   x12 = (x1+x2)*0.5f;
   y12 = (y1+y2)*0.5f;
   x23 = (x2+x3)*0.5f;
@@ -190,7 +190,7 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     cubicBez(x1,y1, x12,y12, x123,y123, x1234,y1234, tol, level+1);
     cubicBez(x1234,y1234, x234,y234, x34,y34, x4,y4, tol, level+1);
   } else {
-    bezPoints[bezCount].x = x4;
+    bezPoints[bezCount].x = x4; //number of points in a given curve will be bezCount.
     bezPoints[bezCount].y = y4;
     bezCount++;
     if(bezCount >= maxBez) {
@@ -199,7 +199,7 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     }
   }
 }
-//#define TESTRNG
+
 #ifdef _WIN32 //win doesn't have good RNG
 #define RANDOM() drnd31() //((double)rand()/(double)RAND_MAX)
 #else //OSX LINUX much faster than win
@@ -606,15 +606,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("\tp%d=%d\n",c,penList[c].count);
   }
 
-  //Toggle bounds vs width maybe?
-
   fprintf(stderr,"bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
   width = g_image->width;
   height = g_image->height;
   printf("Image width x height: %f x %f\n", width, height);
 
   //scaling + fitting operations.
-  // Variables
   float drawSpaceWidth = paperDimensions[0] - (2*xmargin);
   float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
   float scale, drawingWidth, drawingHeight;
@@ -821,13 +818,13 @@ seedrand((float)time(0));
       firstx = x = rotatedX + centerX; 
       firsty = y = rotatedY + centerY;
     }
- 
-      firsty = -firsty;
-      y = -y;
-      maxx = x;
-      minx = x;
-      maxy = y;
-      miny = y;
+
+    firsty = -firsty;
+    y = -y;
+    maxx = x;
+    minx = x;
+    maxy = y;
+    miny = y;
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
@@ -841,13 +838,18 @@ seedrand((float)time(0));
       xold = x;
       yold = y;
       first = 1;
+      int level;
       if(toolPaths[j].city == cities[i].id) {
         //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
         bezCount = 0;
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, 0);
+        level = 0;
+        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
         bxold=x;
         byold=y;
-        for(l=0;l<bezCount;l++) {
+
+        //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile.
+
+        for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
             printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
             continue;
@@ -898,8 +900,11 @@ seedrand((float)time(0));
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
-
-  fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+  if(machineType == 1){
+    fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+  } else if (machineType == 0 || machineType == 2){
+    fprintf(gcode, "G1 Z%f F%i\n", 0, zFeed);
+  }
   //drop off current tool
   //TOOLCHANGE START
   if(machineType == 0){ //6Color
@@ -923,8 +928,8 @@ seedrand((float)time(0));
   free(points);
   free(toolPaths);
   free(cities);
-  nsvgDelete(g_image);
   free(penList);
+  nsvgDelete(g_image);
   //send a signal to qml that the gcode is done
   
 #ifdef DEBUG_OUTPUT
@@ -935,7 +940,6 @@ seedrand((float)time(0));
   return 0;
 }
 
-#define BTSVG
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
