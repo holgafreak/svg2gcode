@@ -533,7 +533,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int currTool = -1; //-1 indicates no tool picked up
   int colorMatch = 0;
   float toolChangePos = -51.5;
-  float tol = 1; //In mm. Tolerance of x mm.
+  float tol = .25; //In mm. Tolerance of x mm.
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
   float xold,yold;
@@ -831,7 +831,7 @@ seedrand((float)time(0));
 
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n",x,y);
+    fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
     //start of city. want to have first move in a city+lower here.
     if(cityStart ==1){
           fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
@@ -892,10 +892,9 @@ seedrand((float)time(0));
         break;
       }
     }
-    if(toolPaths[j].closed) {
-      fprintf(gcode, "( end )\n");
-      fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
+    if(toolPaths[j].closed) { //Line back to first point if path is closed.
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
+      fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
