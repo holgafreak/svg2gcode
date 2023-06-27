@@ -813,11 +813,11 @@ seedrand((float)time(0));
             fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
             fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
             //fprintf(gcode, "( Tool change finished )\n");
-            currTool = targetTool;
           }
         } else if (machineType == 2){
-          fprintf(gcode, "MVP PAUSE COMMAND THING\n");
+          fprintf(gcode, "( MVP PAUSE COMMAND THING )\n");
         }  
+        currTool = targetTool;
       }
     }
     //TOOLCHANGE END
