@@ -815,7 +815,7 @@ seedrand((float)time(0));
             //fprintf(gcode, "( Tool change finished )\n");
           }
         } else if (machineType == 2){
-          fprintf(gcode, "( MVP PAUSE COMMAND THING )\n");
+          fprintf(gcode, "( MVP PAUSE COMMAND THING. TOOL:%d)\n", targetTool);
         }  
         currTool = targetTool;
       }
