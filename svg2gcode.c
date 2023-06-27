@@ -776,12 +776,11 @@ seedrand((float)time(0));
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart == 1 && (machineType == 0)){ //City start and 6Color
+    if(cityStart == 1 && (machineType == 0 || machineType == 2)){ //City start and 6Color. MVP as well, wilk have different conditional for which tool to change to.
       targetColor = cities[i].stroke.color;
       if(targetColor != currColor) { //Detect tool slot of new color
-        for(int p = 0; p<numTools; p++){
+        for(int p = 0; p < numTools; p++){
           if(colorInPen(penList[p], targetColor, penColorCount[p])){
-          //if(penList[p].color == targetColor){
             targetTool = p;
             break;
           }
@@ -789,32 +788,36 @@ seedrand((float)time(0));
         }
       }
       if(targetTool != currTool){ //need to check if tool picked up previously or not
-        if(currTool >= 0){ //tool is being held
-          //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
-          //add pickup and dropoff logic
-          fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-          fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
-          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
-          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
-          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
-          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to pickup
-          fprintf(gcode, "G1 X0 F%i\n", slowTravel); //slow move away from pickup
-          //fprintf(gcode, "( Tool change finished )\n");
-          currTool = targetTool;
-        }
-        if(currTool == -1){ //no tool picked up
-          currColor = penList[targetTool].colors[0];
-          //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
-          fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-          fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
-          fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-          fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
-          fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
-          //fprintf(gcode, "( Tool change finished )\n");
-          currTool = targetTool;
-        }
+        if(machineType == 0){ //Maybe can abstract toolchanges to a different writeToolchange() method.
+          if(currTool >= 0){ //tool is being held
+            //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
+            //add pickup and dropoff logic
+            fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
+            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
+            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
+            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to pickup
+            fprintf(gcode, "G1 X0 F%i\n", slowTravel); //slow move away from pickup
+            //fprintf(gcode, "( Tool change finished )\n");
+            currTool = targetTool;
+          }
+          if(currTool == -1){ //no tool picked up
+            currColor = penList[targetTool].colors[0];
+            //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
+            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
+            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+            fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
+            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
+            //fprintf(gcode, "( Tool change finished )\n");
+            currTool = targetTool;
+          }
+        } else if (machineType == 2){
+          fprintf(gcode, "MVP PAUSE COMMAND THING\n");
+        }  
       }
     }
     //TOOLCHANGE END
