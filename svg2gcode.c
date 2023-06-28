@@ -161,6 +161,23 @@ static float distPtSeg(float x, float y, float px, float py, float qx, float qy)
   dy = py + t*pqy - y;
   return dx*dx + dy*dy;
 }
+
+float interpFeedrate(int A, int B, float m){ //fr X and fr Y
+  if(m == -1){
+    return B;
+  }
+  float scale_factor = (B-A) / (M_PI / 2.0);
+  return A + scale_factor * atan(m);
+}
+
+float absoluteSlope(float x1, float y1, float x2, float y2){
+  if(x2 - x1 == 0){
+    return - 1;
+  } else {
+    return fabs((float)(y2-y1) / (x2 - x1));
+  }
+}
+
 // bezier smoothing
 static void cubicBez(float x1, float y1, float x2, float y2,
              float x3, float y3, float x4, float y4,
@@ -511,10 +528,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int npaths;
   int quality = generationConfig[8]; //0, 1, 2, low, med, high.
 
-
-
   int feed = generationConfig[5]; //need to add some logic on a per move basis on line slope to interp between x and y specific feedrates.
+  int feedY = generationConfig[6];
   int zFeed = generationConfig[7];
+  int tempFeed = 0;
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = paperDimensions[4];
@@ -544,7 +561,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int numReord; //Tol and numReord configured based on quality later in method.
   float x,y,bx,by,bxold,byold,firstx,firsty;
   double d;
-  float xold,yold;
+  float xold,yold = 0;
 
   float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
   float shiftX = 0.;
@@ -734,9 +751,9 @@ seedrand((float)time(0));
     fprintf(gcode,GHEADER,pwr);
     fprintf(gcode, "( Machine Type:%d )\n", machineType);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
-      fprintf(gcode, "G1 Y0 F%i\n", feed);
-      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feed);
-      fprintf(gcode, "G1 Y0 F%i\n", feed);
+      fprintf(gcode, "G1 Y0 F%i\n", feedY);
+      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feedY);
+      fprintf(gcode, "G1 Y0 F%i\n", feedY);
     }
     //fprintf(gcode,"G92X0Y0Z0\n");
   }
@@ -904,11 +921,9 @@ seedrand((float)time(0));
           d = distanceBetweenPoints(bxold, byold, bx, by);
           totalDist += d;
 
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by,feed);
-          // if(cityStart==1){
-          //   fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-          //   cityStart = 0;
-          // }
+          tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
+          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by, tempFeed);
+
           bxold = bx;
           byold = by;
         } 
@@ -918,7 +933,8 @@ seedrand((float)time(0));
       }
     }
     if(toolPaths[j].closed) { //Line back to first point if path is closed.
-      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, feed);
+      tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
+      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, tempFeed);
       fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     }
     //END WRITING MOVES FOR DRAWING SECTION
