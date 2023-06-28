@@ -938,7 +938,7 @@ seedrand((float)time(0));
 
   totalDist = totalDist/1000; //conversion to meters
   //send paper to front
-  fprintf(gcode, "G0 Y0\n");
+  fprintf(gcode, "G0 X0 Y0\n");
   fprintf(gcode,GFOOTER);
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
