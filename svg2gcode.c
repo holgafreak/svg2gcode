@@ -535,7 +535,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int slowTravel = 3500;
   int cityStart=1;
   float zFloor = paperDimensions[4];
-  float ztraverse = paperDimensions[5]; //paperDimensions[4] + paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
+  float ztraverse = paperDimensions[5]; //paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
   float width = -1;
   float height =-1;
   char xy = 1;
@@ -750,7 +750,9 @@ seedrand((float)time(0));
   if(first) {
     fprintf(gcode,GHEADER,pwr);
     fprintf(gcode, "( Machine Type:%d )\n", machineType);
+        fprintf(gcode, "G0 Z%f\n", ztraverse);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
+      fprintf(gcode, "G0 Z0\n");
       fprintf(gcode, "G1 Y0 F%i\n", feedY);
       fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feedY);
       fprintf(gcode, "G1 Y0 F%i\n", feedY);
@@ -922,7 +924,7 @@ seedrand((float)time(0));
           totalDist += d;
 
           tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
-          fprintf(gcode, "( Line DEBUG x1:%f y1:%f x2:%f y2:%f )\n", bxold, byold, bx, by);
+          //fprintf(gcode, "( Line DEBUG x1:%f y1:%f x2:%f y2:%f )\n", bxold, byold, bx, by);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by, tempFeed);
 
           bxold = bx;
