@@ -868,14 +868,14 @@ seedrand((float)time(0));
     fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
     fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
-    //start of city. want to have first move in a city+lower here.
-    //if(cityStart ==1){
-          fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-          cityStart = 0;
-    //}
+    fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
+
+    cityStart = 0;
+    xold, bxold = x;
+    yold, byold = y;
     for(j=k;j<npaths;j++) {
-      xold = x;
-      yold = y;
+      // xold = x;
+      // yold = y;
       first = 1;
       int level;
       if(toolPaths[j].city == cities[i].id) {
@@ -884,8 +884,8 @@ seedrand((float)time(0));
         level = 0;
         collinear = 0;
         cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
-        bxold=x;
-        byold=y;
+        // bxold=x;
+        // byold=y;
 
         //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile. Arc weld on bezCount > 1?
         //fprintf(gcode, "( Toolpath:%d, collinear:%d, BezCount:%d\n )", j, collinear, bezCount);
@@ -922,6 +922,7 @@ seedrand((float)time(0));
           totalDist += d;
 
           tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
+          fprintf(gcode, "( Line DEBUG x1:%f y1:%f x2:%f y2:%f )\n", bxold, byold, bx, by);
           fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by, tempFeed);
 
           bxold = bx;
@@ -935,6 +936,10 @@ seedrand((float)time(0));
     if(toolPaths[j].closed) { //Line back to first point if path is closed.
       tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
       fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, tempFeed);
+      bxold = firstx;
+      byold = firsty;
+      xold = firstx;
+      yold = firsty;
       fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
     }
     //END WRITING MOVES FOR DRAWING SECTION
