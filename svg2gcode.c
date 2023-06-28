@@ -732,6 +732,7 @@ seedrand((float)time(0));
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
+    fprintf(gcode, "( Machine Type:%d )\n", machineType);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G1 Y0 F%i\n", feed);
       fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feed);
@@ -814,8 +815,9 @@ seedrand((float)time(0));
             fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
             //fprintf(gcode, "( Tool change finished )\n");
           }
-        } else if (machineType == 2){
-          fprintf(gcode, "( MVP PAUSE COMMAND THING. TOOL:%d)\n", targetTool);
+        } else if (machineType == 2 && (targetTool != 0)){
+          fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", targetTool);
+          //fprintf(gcode, "M0\n");
         }  
         currTool = targetTool;
       }
