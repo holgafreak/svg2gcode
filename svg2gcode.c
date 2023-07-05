@@ -879,8 +879,8 @@ seedrand((float)time(0));
       firsty = y = rotatedY;
     }
 
-    firsty = firsty;
-    y = y;
+    firsty = -firsty;
+    y = -y;
     maxx = x;
     minx = x;
     maxy = y;
@@ -931,7 +931,7 @@ seedrand((float)time(0));
             by = rotatedBY;
           }
 
-          by = by;
+          by = -by;
           maxx = bx;
           minx = bx;
           maxy = by;
