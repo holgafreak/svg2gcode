@@ -731,7 +731,7 @@ seedrand((float)time(0));
  }
   //fprintf(gcode, "w x h: %f x %f\n", w, h);
   printf("paths %d points %d\n",pathCount, pointsCount);
-  fprintf(gcode, "( centerX:%f, centerY:%f )\n", centerX, centerY);
+  //fprintf(gcode, "( centerX:%f, centerY:%f )\n", centerX, centerY);
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
@@ -767,17 +767,12 @@ seedrand((float)time(0));
   int* mergeLevel = &mergeCount; 
   mergeSort(cities, 0, pathCount-1, 0, mergeLevel); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
 
-  // for(i = 0; i<pathCount; i++){
-  //   printf("City %d at i:%d\n", cities[i].id, i);
-  // }
-
   double totalDist = 0;
 
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER,pwr);
-    fprintf(gcode, "( Machine Type:%d )\n", machineType);
-        fprintf(gcode, "G0 Z%f\n", ztraverse);
+    fprintf(gcode, "G0 Z%f\n", ztraverse);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G0 Z0\n");
       fprintf(gcode, "G1 Y0 F%i\n", feedY);
@@ -874,7 +869,6 @@ seedrand((float)time(0));
     //First x and y point in a toolpath. Scale and shift.
     firstx = x = (toolPaths[k].points[0])*scale+shiftX;
     firsty = y =  (toolPaths[k].points[1])*scale+shiftY;
-    fprintf(gcode, "( Un-Modified point (%f, %f)\n", firstx, firsty);
 
     //ROTATION CODE
     if(svgRotation > 0){
@@ -927,7 +921,6 @@ seedrand((float)time(0));
           }
           bx = (bezPoints[l].x)*scale+shiftX;
           by = (bezPoints[l].y)*scale+shiftY;
-          fprintf(gcode, "( Un-Modified point (%f, %f) )\n", bx, by);
 
           //ROTATION FOR bx and by
           if(svgRotation > 0){
