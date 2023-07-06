@@ -668,17 +668,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int cityStart=1;
   float zFloor = paperDimensions[4];
   float ztraverse = paperDimensions[5]; //paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
-  float width = -1;
-  float height =-1;
   char xy = 1;
-  float w,h,widthInmm,heightInmm = -1.;
   //float scale = 1; //make this dynamic. //this changes with widthInmm
-  float xmargin = paperDimensions[2]; //xmargin around drawn elements in mm
-  float ymargin = paperDimensions[3]; //ymargin around drawn elements in mm
   //config initialization
-  int fitToMaterial = generationConfig[0]; //scaleToMaterial
-  int centerOnMaterial = generationConfig[1];//centerSvg;
-  int svgRotation = generationConfig[2]; //svgRotation * 90 is current degrees of rotation.
   int machineType = generationConfig[3]; //machineType
   float centerX = 0;
   float centerY = 0;
@@ -698,8 +690,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float xold,yold = 0;
 
   float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
-  float shiftX = 0;
-  float shiftY = 0;
   float yMountOffset = 0; //mm
   FILE *gcode;
   FILE *debug;
@@ -718,10 +708,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     switch(ch) {
     case 'P': pwr = atoi(optarg);
       break;
-    case 'Y': shiftY = atof(optarg); // shift
-      break;
-    case 'X': shiftX = atof(optarg); // shift
-      break;
     case 'h': help();
       break;
     case 'f': feed = atoi(optarg);
@@ -729,8 +715,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     case 'n': numReord = atoi(optarg);
       break;
     case 't': tol = atof(optarg);
-      break;
-    case 'w': widthInmm = atof(optarg);
       break;
     default: help();
       return(1);
@@ -924,7 +908,7 @@ seedrand((float)time(0));
     firstx = x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
     firsty = y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
 
-    if(svgRotation > 0){
+    if(settings.svgRotation > 0){
       //Apply transformation to center, rotate, then shift to rotated center.
       rotatedX = rotateX(&settings, firstx, firsty);
       rotatedY = rotateY(&settings, firstx, firsty);
@@ -969,7 +953,7 @@ seedrand((float)time(0));
           by = (bezPoints[l].y)*settings.scale+settings.shiftY;
 
           //ROTATION FOR bx and by
-          if(svgRotation > 0){
+          if(settings.svgRotation > 0){
             //Apply transformation to center
             rotatedBX = rotateX(&settings, bx, by);
             rotatedBY = rotateY(&settings, bx, by);
