@@ -781,6 +781,49 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   return state;
 }
 
+void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
+    if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){
+        gcodeState->targetColor = cities[*i].stroke.color;
+        if(gcodeState->targetColor != gcodeState->currColor) {
+            for(int p = 0; p < numTools; p++){
+                if(colorInPen(penList[p], gcodeState->targetColor, penColorCount[p])){
+                    gcodeState->targetTool = p;
+                    break;
+                }
+                gcodeState->targetTool = 0;
+            }
+        }
+        if(gcodeState->targetTool != gcodeState->currTool){
+            if(machineType == 0){
+                if(gcodeState->currTool >= 0){
+                    fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
+                    fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+                    fprintf(gcode, "G0 X0\n");
+                    fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+                    fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+                    fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+                    fprintf(gcode, "G0 X0\n");
+                    fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+                    fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
+                    gcodeState->currTool = gcodeState->targetTool;
+                }
+                if(gcodeState->currTool == -1){
+                    gcodeState->currColor = penList[gcodeState->targetTool].colors[0];
+                    fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+                    fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+                    fprintf(gcode, "G0 X0\n");
+                    fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
+                    fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+                }
+            } else if (machineType == 2 && (gcodeState->targetTool != 0)){
+                fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
+            }  
+            gcodeState->currTool = gcodeState->targetTool;
+        }
+    }
+}
+
+
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
@@ -791,7 +834,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
   GCodeState gcodeState = initialzeGCodeState(paperDimensions, generationConfig);
   printGCodeState(&gcodeState);
-  
+
   int machineType = generationConfig[3]; //machineType
   int ch;
  
@@ -944,51 +987,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       continue;
     }
 
-    //colorCheck and tracking for TOOLCHANGE
-    if(gcodeState.cityStart == 1 && (machineType == 0 || machineType == 2)){ //City start and 6Color. MVP as well, wilk have different conditional for which tool to change to.
-      gcodeState.targetColor = cities[i].stroke.color;
-      if(gcodeState.targetColor != gcodeState.currColor) { //Detect tool slot of new color
-        for(int p = 0; p < numTools; p++){
-          if(colorInPen(penList[p], gcodeState.targetColor, penColorCount[p])){
-            gcodeState.targetTool = p;
-            break;
-          }
-          gcodeState.targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
-        }
-      }
-      if(gcodeState.targetTool != gcodeState.currTool){ //need to check if tool picked up previously or not
-        if(machineType == 0){ //Maybe can abstract toolchanges to a different writeToolchange() method.
-          if(gcodeState.currTool >= 0){ //tool is being held
-            fprintf(gcode, "G1 A%d\n", gcodeState.currTool*60); //rotate to current color slot
-            fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState.zFeed);
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", gcodeState.toolChangePos, gcodeState.slowTravel); //slow move to dropoff
-            fprintf(gcode, "G1 X0 F%d\n", gcodeState.slowTravel); //slow move away from dropoff
-            fprintf(gcode, "G1 A%d\n", gcodeState.targetTool*60); //rotate to target slot
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", gcodeState.toolChangePos, gcodeState.slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%i\n", gcodeState.slowTravel); //slow move away from pickup
-            //fprintf(gcode, "( Tool change finished )\n");
-            gcodeState.currTool = gcodeState.targetTool;
-          }
-          if(gcodeState.currTool == -1){ //no tool picked up
-            gcodeState.currColor = penList[gcodeState.targetTool].colors[0];
-            //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
-            fprintf(gcode, "G1 A%d\n", gcodeState.targetTool*60); //rotate to target
-            fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState.zFeed);
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%d\n", gcodeState.toolChangePos ,gcodeState.slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%d\n", gcodeState.slowTravel); //slow move away from pickup
-            //fprintf(gcode, "( Tool change finished )\n");
-          }
-        } else if (machineType == 2 && (gcodeState.targetTool != 0)){
-          fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState.targetTool);
-          //fprintf(gcode, "M0\n");
-        }  
-        gcodeState.currTool = gcodeState.targetTool;
-      }
-    }
-    //TOOLCHANGE END
+    //Method for writing toolchanges.
+    writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
     //WRITING MOVES FOR DRAWING
     gcodeState.firstx = gcodeState.x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
