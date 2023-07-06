@@ -590,7 +590,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.sinRot = sin((90*settings.svgRotation)*(M_PI/180));
 
   return settings;
-  }
+}
 
 void printTransformSettings(TransformSettings settings) {
   printf("scale: %f\n", settings.scale);
@@ -612,7 +612,7 @@ void printTransformSettings(TransformSettings settings) {
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
   printf("svgRotation: %d\n", settings.svgRotation);
-  }
+}
 
 float rotateX(TransformSettings* settings, float firstx, float firsty) {
   float rotatedX = (firstx - settings->originalCenterX) * settings->cosRot - (firsty - settings->originalCenterY) * settings->sinRot + settings->centerX;
@@ -656,7 +656,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   City *cities; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  //int numTools = 6;
   int npaths;
   int quality = generationConfig[8]; //0, 1, 2, low, med, high.
 
@@ -669,13 +668,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float zFloor = paperDimensions[4];
   float ztraverse = paperDimensions[5]; //paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
   char xy = 1;
-  //float scale = 1; //make this dynamic. //this changes with widthInmm
-  //config initialization
   int machineType = generationConfig[3]; //machineType
-  float centerX = 0;
-  float centerY = 0;
-  float originalCenterX = 0;
-  float originalCenterY = 0;
 
   int currColor = 1; //if currColor == 1, then no tool is currently being held.
   int targetColor = 0;
@@ -690,24 +683,18 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float xold,yold = 0;
 
   float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
-  float yMountOffset = 0; //mm
+  int ch;
+ 
   FILE *gcode;
   FILE *debug;
-  int pwr = 90;
-  int ch;
-  int dwell = -1;
-  char gbuff[128];
 
   printf("Argc:%d\n", argc);
-
   if(argc < 3) {
     help();
     return -1;
   }
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
     switch(ch) {
-    case 'P': pwr = atoi(optarg);
-      break;
     case 'h': help();
       break;
     case 'f': feed = atoi(optarg);
@@ -756,7 +743,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("\tp%d=%d\n",c,penList[c].count);
   }
 
-  //Move all of this to calcTranform() method. Needs g_image, generationConfig and paperDimensions pointers. so "TransformSettings transform calcTransform(NSVGImage * image, float * generationConfig, float * paperDimensions){}
+  //Settings and calculations for rotation + transformation.
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
   printTransformSettings(settings);
   float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
@@ -812,7 +799,7 @@ seedrand((float)time(0));
 
   printf("\n");
   if(first) {
-    fprintf(gcode,GHEADER,pwr);
+    fprintf(gcode,GHEADER, 90);
     fprintf(gcode, "G0 Z%f\n", ztraverse);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G0 Z0\n");
@@ -1020,12 +1007,10 @@ seedrand((float)time(0));
   free(penList);
   nsvgDelete(g_image);
   //send a signal to qml that the gcode is done
-  
 #ifdef DEBUG_OUTPUT
   fclose(printOut);
 #endif
-  // printf("writeCond reached = %d\n", writeCond);
-  // printf("skipCond reached = %d\n", skipCond);
+
   return 0;
 }
 
