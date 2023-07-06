@@ -979,7 +979,11 @@ seedrand((float)time(0));
   totalDist = totalDist/1000; //conversion to meters
   //send paper to front
   fprintf(gcode, "G0 X0 Y0\n");
-  fprintf(gcode,GFOOTER);
+  if(machineType == 0){
+    fprintf(gcode,GFOOTER);
+  } else if(machineType == 1 || machineType == 2){
+    fprintf(gcode,"M5\n M2\n");
+  }
   fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
   printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
