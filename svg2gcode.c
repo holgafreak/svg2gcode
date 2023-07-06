@@ -965,6 +965,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fprintf(printOut, "PathCount:%d ShapeCount:%d PointCount:%d\n ", pathCount, shapeCount, pointsCount);
 #endif
 
+
+  //WRITING PATHS BEGINS HERE
   for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
 #ifdef DEBUG_OUTPUT
     fprintf(printOut, "City %d at i:%d\n", cities[i].id, i);
@@ -987,7 +989,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       continue;
     }
 
-    //Method for writing toolchanges.
+    //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
     //WRITING MOVES FOR DRAWING
@@ -1016,6 +1018,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     gcodeState.cityStart = 0;
     gcodeState.xold, gcodeState.bxold = gcodeState.x;
     gcodeState.yold, gcodeState.byold = gcodeState.y;
+
     for(j = k; j < gcodeState.npaths; j++) {
       first = 1;
       int level;
@@ -1027,14 +1030,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
         cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState.tol, level);
 
         for(l = 0; l < bezCount; l++) {
-          if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
-            printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
-            continue;
-          }
-          if(bezPoints[l].y > bounds[3]) {
-            printf("bezPoints y %d\n",l);
-            continue;
-          }
           gcodeState.bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
           gcodeState.by = (bezPoints[l].y)*settings.scale+settings.shiftY;
 
