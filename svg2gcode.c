@@ -614,6 +614,17 @@ void printTransformSettings(TransformSettings settings) {
   printf("svgRotation: %d\n", settings.svgRotation);
   }
 
+float rotateX(TransformSettings* settings, float firstx, float firsty) {
+  float rotatedX = (firstx - settings->originalCenterX) * settings->cosRot - (firsty - settings->originalCenterY) * settings->sinRot + settings->centerX;
+  return rotatedX;
+}
+
+float rotateY(TransformSettings* settings, float firstx, float firsty) {
+    float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
+    return rotatedY;
+}
+
+
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
@@ -764,87 +775,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Move all of this to calcTranform() method. Needs g_image, generationConfig and paperDimensions pointers. so "TransformSettings transform calcTransform(NSVGImage * image, float * generationConfig, float * paperDimensions){}
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
   printTransformSettings(settings);
-
-  printf("\n\nGetting rotation information\n");
-  fflush(stdout);
-  width = g_image->width;
-  height = g_image->height;
-  printf("Image width:%f Image Height:%f\n", width, height);
-
-  //scaling + fitting operations.
-  float drawSpaceWidth = paperDimensions[0] - (2*xmargin);
-  float drawSpaceHeight = paperDimensions[1] - (2*ymargin);
-  printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", drawSpaceWidth, drawSpaceHeight);
-  float scale, drawingWidth, drawingHeight;
-  int swap_dim = (svgRotation == 1 || svgRotation == 3);
-
-  // Swap width and height if necessary
-  if (swap_dim) {
-      float temp = width;
-      width = height;
-      height = temp;
-      printf("Swapped image width:%f Image Height:%f\n", width, height);
-  }
-  drawingWidth = width;
-  drawingHeight = height;
-  printf("DrawingWidth:%f, DrawingHeight:%f\n", drawingWidth, drawingHeight);
-  fflush(stdout);
-
-  // Determine if fitting to material is necessary
-  fitToMaterial = ((drawingWidth > drawSpaceHeight) || (drawingHeight > drawSpaceHeight) || fitToMaterial);
-
-  // If fitting to material, calculate scale and new drawing dimensions
-  if (fitToMaterial) {
-      float materialRatio = drawSpaceWidth / drawSpaceHeight;
-      float svgRatio = width / height;
-      scale = (materialRatio > svgRatio) ? (drawSpaceHeight / height) : (drawSpaceWidth / width);
-      printf("Scale%f\n", scale);
-      drawingWidth = width * scale;
-      drawingHeight = height * scale;
-      printf("Scaled drawingWidth:%f drawingHeight:%f\n", drawingWidth, drawingHeight);
-      shiftX = xmargin;
-      shiftY = ymargin;
-  }
-
-  // If centering on material, calculate shift
-  if (centerOnMaterial) {
-      shiftX = xmargin + ((drawSpaceWidth - drawingWidth) / 2);
-      shiftY = ymargin + ((drawSpaceHeight - drawingHeight) / 2);
-      printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", shiftX, shiftY);
-  }
-
-  // Adjust for certain machine types
-  if (machineType == 0) {
-      shiftX += sixColorWidth - paperDimensions[0];
-  }
-  //Calculate center of un-scaled and un-rotated drawin
-
-
-  // Calculate center of scaled and rotated drawing. 
-  centerX = shiftX + drawingWidth / 2;
-  centerY = shiftY + drawingHeight / 2;
-  originalCenterX = centerX;
-  originalCenterY = centerY;
-  if(swap_dim){
-    originalCenterX = shiftX + drawingHeight/2;
-    originalCenterY = shiftY + drawingWidth/2;
-  }
-
-  printf("originalCenterX:%f, originalCenterY:%f\n", originalCenterX, originalCenterY);
-  printf("centerX:%f, centerY:%f\n", centerX, centerY);
-  fflush(stdout);
-
   float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-  float cosRot = cos((90*svgRotation)*(M_PI/180)); 
-  float sinRot = sin((90*svgRotation)*(M_PI/180));
-  //Now pull these types from settings.
-
-  printf("bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
-  printf("SvgRotation:%i\n", settings.svgRotation);
-  printf("drawSpaceWidth:%f drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
-  printf("xMargin:%f yMargin:%f\n", xmargin, ymargin);
-  printf("shiftX:%f, shiftY:%f\n", shiftX, shiftY);
-  fflush(stdout);
   
 #ifdef _WIN32
 seedrand((float)time(0));
@@ -990,19 +921,18 @@ seedrand((float)time(0));
     //TOOLCHANGE END
 
     //WRITING MOVES FOR DRAWING
-    firstx = x = (toolPaths[k].points[0])*scale+shiftX;
-    firsty = y =  (toolPaths[k].points[1])*scale+shiftY;
+    firstx = x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
+    firsty = y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
 
     if(svgRotation > 0){
       //Apply transformation to center, rotate, then shift to rotated center.
-      rotatedX = (firstx - originalCenterX)*cosRot - (firsty - originalCenterY)*sinRot + centerX;
-      rotatedY = (firstx - originalCenterX)*sinRot + (firsty - originalCenterY)*cosRot + centerY;
+      rotatedX = rotateX(&settings, firstx, firsty);
+      rotatedY = rotateY(&settings, firstx, firsty);
       firstx = x = rotatedX;
       firsty = y = rotatedY;
     }
 
-    firsty = -firsty;
-    y = -y;
+    y = firsty = -firsty;
     maxx = x;
     minx = x;
     maxy = y;
@@ -1035,14 +965,14 @@ seedrand((float)time(0));
             printf("bezPoints y %d\n",l);
             continue;
           }
-          bx = (bezPoints[l].x)*scale+shiftX;
-          by = (bezPoints[l].y)*scale+shiftY;
+          bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
+          by = (bezPoints[l].y)*settings.scale+settings.shiftY;
 
           //ROTATION FOR bx and by
           if(svgRotation > 0){
             //Apply transformation to center
-            rotatedBX = (bx - originalCenterX)*cosRot - (by - originalCenterY)*sinRot + centerX;
-            rotatedBY = (bx - originalCenterX)*sinRot + (by - originalCenterY)*cosRot + centerY;
+            rotatedBX = rotateX(&settings, bx, by);
+            rotatedBY = rotateY(&settings, bx, by);
             bx = rotatedBX;
             by = rotatedBY;
           }
