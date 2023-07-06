@@ -646,43 +646,153 @@ void help() {
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
 //create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
 
+typedef struct GCodeState {
+    int npaths;
+    int quality;
+    int feed;
+    int feedY;
+    int zFeed;
+    int tempFeed;
+    int slowTravel;
+    int cityStart;
+    float zFloor;
+    float ztraverse;
+    char xy;
+    int currColor;
+    int targetColor;
+    int targetTool;
+    int currTool;
+    int colorMatch;
+    float toolChangePos;
+    float tol;
+    int numReord;
+    float x;
+    float y;
+    float bx;
+    float by;
+    float bxold;
+    float byold;
+    float firstx;
+    float firsty;
+    double d;
+    float xold;
+    float yold;
+    float maxx;
+    float minx;
+    float maxy;
+    float miny;
+    float zmax;
+    float zmin;
+} GCodeState;
+
+void printGCodeState(GCodeState* state) {
+    printf("\n");  // Start with newline
+    printf("npaths: %d\n", state->npaths);
+    printf("quality: %d\n", state->quality);
+    printf("feed: %d\n", state->feed);
+    printf("feedY: %d\n", state->feedY);
+    printf("zFeed: %d\n", state->zFeed);
+    printf("tempFeed: %d\n", state->tempFeed);
+    printf("slowTravel: %d\n", state->slowTravel);
+    printf("cityStart: %d\n", state->cityStart);
+    printf("zFloor: %f\n", state->zFloor);
+    printf("ztraverse: %f\n", state->ztraverse);
+    printf("xy: %c\n", state->xy);
+    printf("currColor: %d\n", state->currColor);
+    printf("targetColor: %d\n", state->targetColor);
+    printf("targetTool: %d\n", state->targetTool);
+    printf("currTool: %d\n", state->currTool);
+    printf("colorMatch: %d\n", state->colorMatch);
+    printf("toolChangePos: %f\n", state->toolChangePos);
+    printf("tol: %f\n", state->tol);
+    printf("numReord: %d\n", state->numReord);
+    printf("x: %f\n", state->x);
+    printf("y: %f\n", state->y);
+    printf("bx: %f\n", state->bx);
+    printf("by: %f\n", state->by);
+    printf("bxold: %f\n", state->bxold);
+    printf("byold: %f\n", state->byold);
+    printf("firstx: %f\n", state->firstx);
+    printf("firsty: %f\n", state->firsty);
+    printf("d: %lf\n", state->d);
+    printf("xold: %f\n", state->xold);
+    printf("yold: %f\n", state->yold);
+    printf("maxx: %f\n", state->maxx);
+    printf("minx: %f\n", state->minx);
+    printf("maxy: %f\n", state->maxy);
+    printf("miny: %f\n", state->miny);
+    printf("zmax: %f\n", state->zmax);
+    printf("zmin: %f\n", state->zmin);
+    printf("\n");  // End with newline
+}
+
+
+GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
+  GCodeState state;
+  
+  state.quality = generationConfig[8];
+  state.feed= generationConfig[5]; 
+  state.feedY = generationConfig[6];
+  state.zFeed = generationConfig[7];
+  state.tempFeed = 0;
+  state.slowTravel = 3500;
+  state.cityStart = -1;
+  state.zFloor = paperDimensions[4];
+  state.ztraverse = paperDimensions[5];
+  state.xy = 1;
+  state.currColor = 1;
+  state.targetColor = 0;
+  state.targetTool = 0;
+  state.currTool = -1;
+  state.colorMatch = 0;
+  state.toolChangePos = -51.5;
+
+  if(state.quality == 2){
+    state.tol = 0.25;
+    state.numReord = 20;
+  } else if (state.quality == 1){
+    state.tol = 0.5;
+    state.numReord = 10;
+  } else {
+    state.tol = 1;
+    state.numReord = 10;
+  }
+
+  state.xold = 0;
+  state.yold = 0;
+  state.maxx = -10000;
+  state.minx = 10000;
+  state.maxy = -10000;
+  state.miny = 10000;
+  state.zmax = -1000;
+  state.zmin = 1000;
+
+  state.npaths = 0;
+  state.x = -FLT_MAX;
+  state.y = -FLT_MAX;
+  state.bx = -FLT_MAX;
+  state.by = -FLT_MAX;
+  state.bxold = -FLT_MAX;
+  state.byold = -FLT_MAX;
+  state.firstx = -FLT_MAX;
+  state.firsty = -FLT_MAX;
+  state.d = -FLT_MAX;
+
+  return state;
+}
+
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
   int i,j,k,l,first = 1;
-  struct NSVGshape *shape1,*shape2;
-  struct NSVGpath *path1,*path2;
   SVGPoint* points;
   ToolPath* toolPaths;
   City *cities; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  int npaths;
-  int quality = generationConfig[8]; //0, 1, 2, low, med, high.
-
-  int feed = generationConfig[5]; //need to add some logic on a per move basis on line slope to interp between x and y specific feedrates.
-  int feedY = generationConfig[6];
-  int zFeed = generationConfig[7];
-  int tempFeed = 0;
-  int slowTravel = 3500;
-  int cityStart=1;
-  float zFloor = paperDimensions[4];
-  float ztraverse = paperDimensions[5]; //paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
-  char xy = 1;
+  GCodeState gcodeState = initialzeGCodeState(paperDimensions, generationConfig);
+  printGCodeState(&gcodeState);
+  
   int machineType = generationConfig[3]; //machineType
-
-  int currColor = 1; //if currColor == 1, then no tool is currently being held.
-  int targetColor = 0;
-  int targetTool = 0; //start as 0 so no tool is matched
-  int currTool = -1; //-1 indicates no tool picked up
-  int colorMatch = 0;
-  float toolChangePos = -51.5;
-  float tol; //In mm. Tolerance of x mm.
-  int numReord; //Tol and numReord configured based on quality later in method.
-  float x,y,bx,by,bxold,byold,firstx,firsty;
-  double d;
-  float xold,yold = 0;
-
-  float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
   int ch;
  
   FILE *gcode;
@@ -697,11 +807,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     switch(ch) {
     case 'h': help();
       break;
-    case 'f': feed = atoi(optarg);
+    case 'f': gcodeState.feed = atoi(optarg);
       break;
-    case 'n': numReord = atoi(optarg);
+    case 'n': gcodeState.numReord = atoi(optarg);
       break;
-    case 't': tol = atof(optarg);
+    case 't': gcodeState.tol = atof(optarg);
       break;
     default: help();
       return(1);
@@ -715,17 +825,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
-  }
-
-  if(quality == 2){
-    tol = 0.25;
-    numReord = 20;
-  } else if (quality == 1){
-    tol = 0.5;
-    numReord = 10;
-  } else {
-    tol = 1;
-    numReord = 10;
   }
 
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
@@ -749,7 +848,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
   
 #ifdef _WIN32
-seedrand((float)time(0));
+  seedrand((float)time(0));
 #endif
 
  gcode=fopen(argv[optind+1],"w");
@@ -769,7 +868,7 @@ seedrand((float)time(0));
   memset(cities, 0, pathCount*sizeof(City));
 
   printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
-  npaths = 0;
+  gcodeState.npaths = 0;
 #ifdef DEBUG_OUTPUT
   debug = fopen("debug.txt", "w");
   if(debug == NULL) {
@@ -777,13 +876,13 @@ seedrand((float)time(0));
     return -1;
   }
 #endif
-  calcPaths(points, toolPaths, &npaths, cities, debug);
+  calcPaths(points, toolPaths, &gcodeState.npaths, cities, debug);
 #ifdef DEBUG_OUTPUT
   fclose(debug);
 #endif
   printf("Reorder with numCities: %d\n",pathCount);
-  for(k=0;k<numReord;k++) {
-    reorder(points, pathCount, xy, cities, penList, quality);
+  for(k=0;k < gcodeState.numReord; k++) {
+    reorder(points, pathCount, gcodeState.xy, cities, penList, gcodeState.quality);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -800,12 +899,12 @@ seedrand((float)time(0));
   printf("\n");
   if(first) {
     fprintf(gcode,GHEADER, 90);
-    fprintf(gcode, "G0 Z%f\n", ztraverse);
+    fprintf(gcode, "G0 Z%f\n", gcodeState.ztraverse);
     if(machineType == 0 || machineType == 2) { //6Color or MVP
       fprintf(gcode, "G0 Z0\n");
-      fprintf(gcode, "G1 Y0 F%i\n", feedY);
-      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feedY);
-      fprintf(gcode, "G1 Y0 F%i\n", feedY);
+      fprintf(gcode, "G1 Y0 F%i\n", gcodeState.feedY);
+      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState.feedY);
+      fprintf(gcode, "G1 Y0 F%i\n", gcodeState.feedY);
     }
     //fprintf(gcode,"G92X0Y0Z0\n");
   }
@@ -827,8 +926,8 @@ seedrand((float)time(0));
 #ifdef DEBUG_OUTPUT
     fprintf(printOut, "City %d at i:%d\n", cities[i].id, i);
 #endif
-    cityStart=1;
-    for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
+    gcodeState.cityStart=1;
+    for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                             //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(toolPaths[k].city == -1){ //means already written. Go back to start of above for loop and check next.
           continue;
@@ -840,84 +939,84 @@ seedrand((float)time(0));
         break;
       }
     }
-    if(k > npaths-1) {
+    if(k > gcodeState.npaths - 1) {
       printf("Continue hit\n");
       continue;
     }
 
     //colorCheck and tracking for TOOLCHANGE
-    if(cityStart == 1 && (machineType == 0 || machineType == 2)){ //City start and 6Color. MVP as well, wilk have different conditional for which tool to change to.
-      targetColor = cities[i].stroke.color;
-      if(targetColor != currColor) { //Detect tool slot of new color
+    if(gcodeState.cityStart == 1 && (machineType == 0 || machineType == 2)){ //City start and 6Color. MVP as well, wilk have different conditional for which tool to change to.
+      gcodeState.targetColor = cities[i].stroke.color;
+      if(gcodeState.targetColor != gcodeState.currColor) { //Detect tool slot of new color
         for(int p = 0; p < numTools; p++){
-          if(colorInPen(penList[p], targetColor, penColorCount[p])){
-            targetTool = p;
+          if(colorInPen(penList[p], gcodeState.targetColor, penColorCount[p])){
+            gcodeState.targetTool = p;
             break;
           }
-          targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
+          gcodeState.targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
         }
       }
-      if(targetTool != currTool){ //need to check if tool picked up previously or not
+      if(gcodeState.targetTool != gcodeState.currTool){ //need to check if tool picked up previously or not
         if(machineType == 0){ //Maybe can abstract toolchanges to a different writeToolchange() method.
-          if(currTool >= 0){ //tool is being held
-            fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+          if(gcodeState.currTool >= 0){ //tool is being held
+            fprintf(gcode, "G1 A%d\n", gcodeState.currTool*60); //rotate to current color slot
+            fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState.zFeed);
             fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
-            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
-            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
+            fprintf(gcode, "G1 X%f F%i\n", gcodeState.toolChangePos, gcodeState.slowTravel); //slow move to dropoff
+            fprintf(gcode, "G1 X0 F%d\n", gcodeState.slowTravel); //slow move away from dropoff
+            fprintf(gcode, "G1 A%d\n", gcodeState.targetTool*60); //rotate to target slot
             fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%i\n", slowTravel); //slow move away from pickup
+            fprintf(gcode, "G1 X%f F%i\n", gcodeState.toolChangePos, gcodeState.slowTravel); //slow move to pickup
+            fprintf(gcode, "G1 X0 F%i\n", gcodeState.slowTravel); //slow move away from pickup
             //fprintf(gcode, "( Tool change finished )\n");
-            currTool = targetTool;
+            gcodeState.currTool = gcodeState.targetTool;
           }
-          if(currTool == -1){ //no tool picked up
-            currColor = penList[targetTool].colors[0];
+          if(gcodeState.currTool == -1){ //no tool picked up
+            gcodeState.currColor = penList[gcodeState.targetTool].colors[0];
             //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
-            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
+            fprintf(gcode, "G1 A%d\n", gcodeState.targetTool*60); //rotate to target
+            fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState.zFeed);
             fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
+            fprintf(gcode, "G1 X%f F%d\n", gcodeState.toolChangePos ,gcodeState.slowTravel); //slow move to pickup
+            fprintf(gcode, "G1 X0 F%d\n", gcodeState.slowTravel); //slow move away from pickup
             //fprintf(gcode, "( Tool change finished )\n");
           }
-        } else if (machineType == 2 && (targetTool != 0)){
-          fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", targetTool);
+        } else if (machineType == 2 && (gcodeState.targetTool != 0)){
+          fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState.targetTool);
           //fprintf(gcode, "M0\n");
         }  
-        currTool = targetTool;
+        gcodeState.currTool = gcodeState.targetTool;
       }
     }
     //TOOLCHANGE END
 
     //WRITING MOVES FOR DRAWING
-    firstx = x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
-    firsty = y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
+    gcodeState.firstx = gcodeState.x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
+    gcodeState.firsty = gcodeState.y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
 
     if(settings.svgRotation > 0){
       //Apply transformation to center, rotate, then shift to rotated center.
-      rotatedX = rotateX(&settings, firstx, firsty);
-      rotatedY = rotateY(&settings, firstx, firsty);
-      firstx = x = rotatedX;
-      firsty = y = rotatedY;
+      rotatedX = rotateX(&settings, gcodeState.firstx, gcodeState.firsty);
+      rotatedY = rotateY(&settings, gcodeState.firstx, gcodeState.firsty);
+      gcodeState.firstx = gcodeState.x = rotatedX;
+      gcodeState.firsty = gcodeState.y = rotatedY;
     }
 
-    y = firsty = -firsty;
-    maxx = x;
-    minx = x;
-    maxy = y;
-    miny = y;
+    gcodeState.y = gcodeState.firsty = -gcodeState.firsty;
+    gcodeState.maxx = gcodeState.x;
+    gcodeState.minx = gcodeState.x;
+    gcodeState.maxy = gcodeState.y;
+    gcodeState.miny = gcodeState.y;
 
-    fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
-    fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
+    fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState.x, gcodeState.y);
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.zFloor, gcodeState.zFeed);
 
-    cityStart = 0;
-    xold, bxold = x;
-    yold, byold = y;
-    for(j=k;j<npaths;j++) {
+    gcodeState.cityStart = 0;
+    gcodeState.xold, gcodeState.bxold = gcodeState.x;
+    gcodeState.yold, gcodeState.byold = gcodeState.y;
+    for(j = k; j < gcodeState.npaths; j++) {
       first = 1;
       int level;
       if(toolPaths[j].city == cities[i].id) {
@@ -925,7 +1024,7 @@ seedrand((float)time(0));
         bezCount = 0;
         level = 0;
         collinear = 0;
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
+        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState.tol, level);
 
         for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
@@ -936,33 +1035,33 @@ seedrand((float)time(0));
             printf("bezPoints y %d\n",l);
             continue;
           }
-          bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
-          by = (bezPoints[l].y)*settings.scale+settings.shiftY;
+          gcodeState.bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
+          gcodeState.by = (bezPoints[l].y)*settings.scale+settings.shiftY;
 
           //ROTATION FOR bx and by
           if(settings.svgRotation > 0){
             //Apply transformation to center
-            rotatedBX = rotateX(&settings, bx, by);
-            rotatedBY = rotateY(&settings, bx, by);
-            bx = rotatedBX;
-            by = rotatedBY;
+            rotatedBX = rotateX(&settings, gcodeState.bx, gcodeState.by);
+            rotatedBY = rotateY(&settings, gcodeState.bx, gcodeState.by);
+            gcodeState.bx = rotatedBX;
+            gcodeState.by = rotatedBY;
           }
 
-          by = -by;
-          maxx = bx;
-          minx = bx;
-          maxy = by;
-          miny = by;
+          gcodeState.by = -gcodeState.by;
+          gcodeState.maxx = gcodeState.bx;
+          gcodeState.minx = gcodeState.bx;
+          gcodeState.maxy = gcodeState.by;
+          gcodeState.miny = gcodeState.by;
 
-          d = distanceBetweenPoints(bxold, byold, bx, by);
-          totalDist += d;
+          gcodeState.d = distanceBetweenPoints(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by);
+          totalDist += gcodeState.d;
 
-          tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
+          gcodeState.tempFeed = interpFeedrate(gcodeState.feed, gcodeState.feedY, absoluteSlope(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by));
           //fprintf(gcode, "( Line DEBUG x1:%f y1:%f x2:%f y2:%f )\n", bxold, byold, bx, by);
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by, tempFeed);
+          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState.bx, gcodeState.by, gcodeState.tempFeed);
 
-          bxold = bx;
-          byold = by;
+          gcodeState.bxold = gcodeState.bx;
+          gcodeState.byold = gcodeState.by;
         } 
         toolPaths[j].city = -1; // This path has been written
       } else {
@@ -970,26 +1069,26 @@ seedrand((float)time(0));
       }
     }
     if(toolPaths[j].closed) { //Line back to first point if path is closed.
-      tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
-      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, tempFeed);
-      bxold = firstx;
-      byold = firsty;
-      xold = firstx;
-      yold = firsty;
-      fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
+      gcodeState.tempFeed = interpFeedrate(gcodeState.feed, gcodeState.feedY, absoluteSlope(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by));
+      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState.firstx, gcodeState.firsty, gcodeState.tempFeed);
+      gcodeState.bxold = gcodeState.firstx;
+      gcodeState.byold = gcodeState.firsty;
+      gcodeState.xold = gcodeState.firstx;
+      gcodeState.yold = gcodeState.firsty;
+      fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
   if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
-    fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
+    fprintf(gcode, "G1 Z%f F%i\n", gcodeState.ztraverse, gcodeState.zFeed);
   } else if (machineType == 0){ //Lift to zero for tool dropoff after job
-    fprintf(gcode, "G1 Z%f F%i\n", 0, zFeed);
+    fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState.zFeed);
   }
   //drop off current tool
   if(machineType == 0){ //6Color
-    fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
+    fprintf(gcode, "G1 A%d\n", gcodeState.currTool*60); //rotate to current color slot
     fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-    fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
+    fprintf(gcode, "G1 X%f\n", gcodeState.toolChangePos); //slow move to dropoff
     fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
   }
 
@@ -1001,9 +1100,9 @@ seedrand((float)time(0));
   } else if(machineType == 1 || machineType == 2){
     fprintf(gcode,"M5\n M2\n");
   }
-  fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
-  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
-  printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
+  fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
+  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
+  printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n", gcodeState.minx , gcodeState.miny, gcodeState.maxx, gcodeState.maxy);
   fclose(gcode);
   free(points);
   free(toolPaths);
