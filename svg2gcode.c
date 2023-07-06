@@ -992,7 +992,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
-    //WRITING MOVES FOR DRAWING
+    //WRITING MOVES FOR DRAWING 
+    //Calculating first point.
     gcodeState.firstx = gcodeState.x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
     gcodeState.firsty = gcodeState.y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
 
@@ -1003,21 +1004,27 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       gcodeState.firstx = gcodeState.x = rotatedX;
       gcodeState.firsty = gcodeState.y = rotatedY;
     }
+    //End calculating first point.
 
+    //Update state for first move.
     gcodeState.y = gcodeState.firsty = -gcodeState.firsty;
     gcodeState.maxx = gcodeState.x;
     gcodeState.minx = gcodeState.x;
     gcodeState.maxy = gcodeState.y;
     gcodeState.miny = gcodeState.y;
-
+    gcodeState.cityStart = 0;
+    gcodeState.xold, gcodeState.bxold = gcodeState.x;
+    gcodeState.yold, gcodeState.byold = gcodeState.y;
+    //End update state for first move
+    
+    //Write first point
     fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
     fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
     fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState.x, gcodeState.y);
     fprintf(gcode, "G1 Z%f F%d\n", gcodeState.zFloor, gcodeState.zFeed);
+    //Write first point end. May want to move this section to a consolidated writeCurve method.
 
-    gcodeState.cityStart = 0;
-    gcodeState.xold, gcodeState.bxold = gcodeState.x;
-    gcodeState.yold, gcodeState.byold = gcodeState.y;
+    //Ideally, calc all the X and Y points into their own separate arrays, then write through the arrays, with the option to iterate from the front vs the back. 
 
     for(j = k; j < gcodeState.npaths; j++) {
       first = 1;
@@ -1074,6 +1081,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     }
     //END WRITING MOVES FOR DRAWING SECTION
   }
+
+
   if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
     fprintf(gcode, "G1 Z%f F%i\n", gcodeState.ztraverse, gcodeState.zFeed);
   } else if (machineType == 0){ //Lift to zero for tool dropoff after job
