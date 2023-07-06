@@ -493,6 +493,127 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   numCompOut = numComp;
 }
 
+typedef struct TransformSettings {
+    float scale;
+    float drawingWidth;
+    float drawingHeight;
+    float drawSpaceWidth;
+    float drawSpaceHeight;
+    float shiftX;
+    float shiftY;
+    float centerX;
+    float centerY;
+    float originalCenterX;
+    float originalCenterY;
+    float cosRot;
+    float sinRot;
+    float xmargin;
+    float ymargin;
+    int fitToMaterial;
+    int centerOnMaterial;
+    int swapDim;
+    int svgRotation;
+} TransformSettings;
+
+TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
+  TransformSettings settings;
+  float width = g_image->width;
+  float height = g_image->height;
+  printf("Image width:%f Image Height:%f\n", width, height);
+
+  settings.svgRotation = generationConfig[2];
+  settings.xmargin = paperDimensions[2];
+  settings.ymargin = paperDimensions[3];
+  //scaling + fitting operations.
+  settings.drawSpaceWidth = paperDimensions[0] - (2*settings.xmargin);
+  settings.drawSpaceHeight = paperDimensions[1] - (2*settings.ymargin);
+  printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
+  settings.swapDim = (generationConfig[2] == 1 || generationConfig[2] == 3);
+
+  // Swap width and height if necessary
+  if (settings.swapDim) {
+      float temp = width;
+      width = height;
+      height = temp;
+      printf("Swapped image width:%f Image Height:%f\n", width, height);
+  }
+  settings.drawingWidth = width;
+  settings.drawingHeight = height;
+  printf("DrawingWidth:%f, DrawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
+  fflush(stdout);
+
+  // Determine if fitting to material is necessary
+  settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceHeight) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
+
+  // If fitting to material, calculate scale and new drawing dimensions
+  if (settings.fitToMaterial) {
+      float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+      float svgRatio = width / height;
+      settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
+      printf("Scale%f\n", settings.scale);
+      settings.drawingWidth = width * settings.scale;
+      settings.drawingHeight = height * settings.scale;
+      printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
+      settings.shiftX = settings.xmargin;
+      settings.shiftY = settings.ymargin;
+  }
+
+  settings.centerOnMaterial = generationConfig[1];
+
+  // If centering on material, calculate shift
+  if (settings.centerOnMaterial) {
+      settings.shiftX = settings.xmargin + ((settings.drawSpaceWidth - settings.drawingWidth) / 2);
+      settings.shiftY = settings.ymargin + ((settings.drawSpaceHeight - settings.drawingHeight) / 2);
+      printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
+  }
+
+  // Adjust for certain machine types
+  if (generationConfig[3] == 0) {
+      settings.shiftX += sixColorWidth - paperDimensions[0];
+  }
+
+  // Calculate center of scaled and rotated drawing. 
+  settings.centerX = settings.shiftX + settings.drawingWidth / 2;
+  settings.centerY = settings.shiftY + settings.drawingHeight / 2;
+  settings.originalCenterX = settings.centerX;
+  settings.originalCenterY = settings.centerY;
+  if(settings.swapDim){
+    settings.originalCenterX = settings.shiftX + settings.drawingHeight/2;
+    settings.originalCenterY = settings.shiftY + settings.drawingWidth/2;
+  }
+
+  printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
+  printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
+  fflush(stdout);
+
+  settings.cosRot = cos((90*settings.svgRotation)*(M_PI/180)); 
+  settings.sinRot = sin((90*settings.svgRotation)*(M_PI/180));
+
+  return settings;
+  }
+
+void printTransformSettings(TransformSettings settings) {
+  printf("scale: %f\n", settings.scale);
+  printf("drawingWidth: %f\n", settings.drawingWidth);
+  printf("drawingHeight: %f\n", settings.drawingHeight);
+  printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
+  printf("drawSpaceHeight: %f\n", settings.drawSpaceHeight);
+  printf("shiftX: %f\n", settings.shiftX);
+  printf("shiftY: %f\n", settings.shiftY);
+  printf("centerX: %f\n", settings.centerX);
+  printf("centerY: %f\n", settings.centerY);
+  printf("originalCenterX: %f\n", settings.originalCenterX);
+  printf("originalCenterY: %f\n", settings.originalCenterY);
+  printf("cosRot: %f\n", settings.cosRot);
+  printf("sinRot: %f\n", settings.sinRot);
+  printf("xmargin: %f\n", settings.xmargin);
+  printf("ymargin: %f\n", settings.ymargin);
+  printf("fitToMaterial: %d\n", settings.fitToMaterial);
+  printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
+  printf("swapDim: %d\n", settings.swapDim);
+  printf("svgRotation: %d\n", settings.svgRotation);
+  }
+
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
@@ -640,7 +761,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("\tp%d=%d\n",c,penList[c].count);
   }
 
-  printf("Getting rotation information\n");
+  //Move all of this to calcTranform() method. Needs g_image, generationConfig and paperDimensions pointers. so "TransformSettings transform calcTransform(NSVGImage * image, float * generationConfig, float * paperDimensions){}
+  TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
+  printTransformSettings(settings);
+
+  printf("\n\nGetting rotation information\n");
   fflush(stdout);
   width = g_image->width;
   height = g_image->height;
@@ -712,10 +837,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
   float cosRot = cos((90*svgRotation)*(M_PI/180)); 
   float sinRot = sin((90*svgRotation)*(M_PI/180));
+  //Now pull these types from settings.
 
   printf("bounds %f %f X %f %f\n",bounds[0],bounds[1],bounds[2],bounds[3]);
-  printf("SvgRotation:%i\n", svgRotation);
-  printf("drawSpaceWidth:%f drawSpaceHeight:%f\n", drawSpaceWidth, drawSpaceHeight);
+  printf("SvgRotation:%i\n", settings.svgRotation);
+  printf("drawSpaceWidth:%f drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
   printf("xMargin:%f yMargin:%f\n", xmargin, ymargin);
   printf("shiftX:%f, shiftY:%f\n", shiftX, shiftY);
   fflush(stdout);
@@ -832,8 +958,6 @@ seedrand((float)time(0));
       if(targetTool != currTool){ //need to check if tool picked up previously or not
         if(machineType == 0){ //Maybe can abstract toolchanges to a different writeToolchange() method.
           if(currTool >= 0){ //tool is being held
-            //fprintf(gcode, "( Tool change needed to tool %d )\n",targetTool+1);
-            //add pickup and dropoff logic
             fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
             fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
             fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
@@ -866,13 +990,11 @@ seedrand((float)time(0));
     //TOOLCHANGE END
 
     //WRITING MOVES FOR DRAWING
-    //First x and y point in a toolpath. Scale and shift.
     firstx = x = (toolPaths[k].points[0])*scale+shiftX;
     firsty = y =  (toolPaths[k].points[1])*scale+shiftY;
 
-    //ROTATION CODE
     if(svgRotation > 0){
-      //Apply transformation to center. CenterX and CenterY should carry scale and shift with them.
+      //Apply transformation to center, rotate, then shift to rotated center.
       rotatedX = (firstx - originalCenterX)*cosRot - (firsty - originalCenterY)*sinRot + centerX;
       rotatedY = (firstx - originalCenterX)*sinRot + (firsty - originalCenterY)*cosRot + centerY;
       firstx = x = rotatedX;
@@ -895,8 +1017,6 @@ seedrand((float)time(0));
     xold, bxold = x;
     yold, byold = y;
     for(j=k;j<npaths;j++) {
-      // xold = x;
-      // yold = y;
       first = 1;
       int level;
       if(toolPaths[j].city == cities[i].id) {
@@ -905,11 +1025,7 @@ seedrand((float)time(0));
         level = 0;
         collinear = 0;
         cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
-        // bxold=x;
-        // byold=y;
 
-        //Arc weld points in bezPoints here. Iterate through bezPoints with bezCount, weld as many points into arcs as possile. Arc weld on bezCount > 1?
-        //fprintf(gcode, "( Toolpath:%d, collinear:%d, BezCount:%d\n )", j, collinear, bezCount);
         for(l = 0; l < bezCount; l++) {
           if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
             printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
