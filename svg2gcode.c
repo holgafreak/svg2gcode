@@ -790,9 +790,10 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 }
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
-    if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
-        fprintf(gcode, "G1 Z%f F%i\n", gcodeState->ztraverse, gcodeState->zFeed);
-    } else if (machineType == 0){ //Lift to zero for tool dropoff after job
+    // if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
+    //     fprintf(gcode, "G1 Z%f F%i\n", gcodeState->ztraverse, gcodeState->zFeed);
+    // } else 
+    if (machineType == 0){ //Lift to zero for tool dropoff after job
         fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
     }
     //drop off current tool
@@ -811,8 +812,23 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
     } else if(machineType == 1 || machineType == 2){
         fprintf(gcode,"M5\nM2\n");
     }
-    fprintf(gcode, "( Total distance traveled = %f m\n", gcodeState->totalDist);
+    fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
 }
+
+void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
+#ifdef DEBUG_OUTPUT
+  fprintf(gcode, "( Machine Type: %i )\n", machineType);
+#endif
+    fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
+    fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
+
+    if(machineType == 0 || machineType == 2) { //6Color or MVP
+        fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+        fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState->feedY);
+        fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+    }
+}
+
 
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
@@ -918,14 +934,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //End sorting.
 
   //Break into writeHeader method.
-  fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
-  fprintf(gcode, "G0 Z%f\n", gcodeState.ztraverse);
-  if(machineType == 0 || machineType == 2) { //6Color or MVP
-    fprintf(gcode, "G0 Z0\n");
-    fprintf(gcode, "G1 Y0 F%i\n", gcodeState.feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState.feedY);
-    fprintf(gcode, "G1 Y0 F%i\n", gcodeState.feedY);
-  }
+  writeHeader(&gcodeState, gcode, machineType, paperDimensions);
 
   k=0;
   i=0;
@@ -972,7 +981,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     //End update state for first move
     
     //Write first point
-    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( FirstPoint: toolPaths[%i].city == cities[%i].id == %i )\n", k, i, cities[i].id);
 #endif
@@ -1025,13 +1033,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     }
     if(toolPaths[j].closed) { //Line back to first point if path is closed.
       gcodeState.tempFeed = interpFeedrate(gcodeState.feed, gcodeState.feedY, absoluteSlope(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by));
-      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState.firstx, gcodeState.firsty, gcodeState.tempFeed);
+      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState.firstx, gcodeState.firsty, gcodeState.tempFeed);
       gcodeState.bxold = gcodeState.firstx;
       gcodeState.byold = gcodeState.firsty;
       gcodeState.xold = gcodeState.firstx;
       gcodeState.yold = gcodeState.firsty;
-      fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
     }
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
     //END WRITING MOVES FOR DRAWING SECTION
   }
 
