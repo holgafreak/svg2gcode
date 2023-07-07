@@ -547,10 +547,10 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // Swap width and height if necessary
   if (settings.swapDim) {
-      float temp = width;
-      width = height;
-      height = temp;
-      printf("Swapped image width:%f Image Height:%f\n", width, height);
+    float temp = width;
+    width = height;
+    height = temp;
+    printf("Swapped image width:%f Image Height:%f\n", width, height);
   }
   settings.drawingWidth = width;
   settings.drawingHeight = height;
@@ -562,15 +562,15 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (settings.fitToMaterial) {
-      float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-      float svgRatio = width / height;
-      settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
-      printf("Scale%f\n", settings.scale);
-      settings.drawingWidth = width * settings.scale;
-      settings.drawingHeight = height * settings.scale;
-      printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-      settings.shiftX = settings.xmargin;
-      settings.shiftY = settings.ymargin;
+    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+    float svgRatio = width / height;
+    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
+    printf("Scale%f\n", settings.scale);
+    settings.drawingWidth = width * settings.scale;
+    settings.drawingHeight = height * settings.scale;
+    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
+    settings.shiftX = settings.xmargin;
+    settings.shiftY = settings.ymargin;
   }
 
   settings.centerOnMaterial = generationConfig[1];
@@ -635,68 +635,49 @@ float rotateX(TransformSettings* settings, float firstx, float firsty) {
 }
 
 float rotateY(TransformSettings* settings, float firstx, float firsty) {
-    float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
-    return rotatedY;
+  float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
+  return rotatedY;
 }
-
-
-void help() {
-  printf("usage: svg2gcode [options] svg-file gcode-file\n");
-  printf("options:\n");
-  printf("\t-Y shift Y-ax\n");
-  printf("\t-X shift X-ax\n");
-  printf("\t-f feed rate (3500)\n");
-  printf("\t-n # number of reorders (30)\n");
-  printf("\t-s scale (1.0)\n");
-  printf("\t-S 1 scale to material size\n");
-  printf("\t-C center on drawing space\n");
-  printf("\t-w final width in mm\n");
-  printf("\t-t Bezier tolerance (0.5)\n");
-  printf("\t-Z z-engage (-1.0)\n");
-  printf("\t-B do Bezier curve smoothing\n");
-  printf("\t-h this help\n");
-  }
 
 //want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
 //machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
 //create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
 
 void printGCodeState(GCodeState* state) {
-    printf("\n");  // Start with newline
-    printf("npaths: %d\n", state->npaths);
-    printf("quality: %d\n", state->quality);
-    printf("feed: %d\n", state->feed);
-    printf("feedY: %d\n", state->feedY);
-    printf("zFeed: %d\n", state->zFeed);
-    printf("tempFeed: %d\n", state->tempFeed);
-    printf("slowTravel: %d\n", state->slowTravel);
-    printf("cityStart: %d\n", state->cityStart);
-    printf("zFloor: %f\n", state->zFloor);
-    printf("ztraverse: %f\n", state->ztraverse);
-    printf("xy: %c\n", state->xy);
-    printf("currColor: %d\n", state->currColor);
-    printf("targetColor: %d\n", state->targetColor);
-    printf("targetTool: %d\n", state->targetTool);
-    printf("currTool: %d\n", state->currTool);
-    printf("colorMatch: %d\n", state->colorMatch);
-    printf("toolChangePos: %f\n", state->toolChangePos);
-    printf("tol: %f\n", state->tol);
-    printf("numReord: %d\n", state->numReord);
-    printf("x: %f\n", state->x);
-    printf("y: %f\n", state->y);
-    printf("bx: %f\n", state->bx);
-    printf("by: %f\n", state->by);
-    printf("bxold: %f\n", state->bxold);
-    printf("byold: %f\n", state->byold);
-    printf("firstx: %f\n", state->firstx);
-    printf("firsty: %f\n", state->firsty);
-    printf("d: %lf\n", state->d);
-    printf("totalDist: %lf\n", state->totalDist);
-    printf("xold: %f\n", state->xold);
-    printf("yold: %f\n", state->yold);
-    printf("\n");  // End with newline
+  printf("\n");  // Start with newline
+  printf("npaths: %d\n", state->npaths);
+  printf("quality: %d\n", state->quality);
+  printf("feed: %d\n", state->feed);
+  printf("feedY: %d\n", state->feedY);
+  printf("zFeed: %d\n", state->zFeed);
+  printf("tempFeed: %d\n", state->tempFeed);
+  printf("slowTravel: %d\n", state->slowTravel);
+  printf("cityStart: %d\n", state->cityStart);
+  printf("zFloor: %f\n", state->zFloor);
+  printf("ztraverse: %f\n", state->ztraverse);
+  printf("xy: %c\n", state->xy);
+  printf("currColor: %d\n", state->currColor);
+  printf("targetColor: %d\n", state->targetColor);
+  printf("targetTool: %d\n", state->targetTool);
+  printf("currTool: %d\n", state->currTool);
+  printf("colorMatch: %d\n", state->colorMatch);
+  printf("toolChangePos: %f\n", state->toolChangePos);
+  printf("tol: %f\n", state->tol);
+  printf("numReord: %d\n", state->numReord);
+  printf("x: %f\n", state->x);
+  printf("y: %f\n", state->y);
+  printf("bx: %f\n", state->bx);
+  printf("by: %f\n", state->by);
+  printf("bxold: %f\n", state->bxold);
+  printf("byold: %f\n", state->byold);
+  printf("firstx: %f\n", state->firstx);
+  printf("firsty: %f\n", state->firsty);
+  printf("d: %lf\n", state->d);
+  printf("totalDist: %lf\n", state->totalDist);
+  printf("xold: %f\n", state->xold);
+  printf("yold: %f\n", state->yold);
+  printf("\n");  // End with newline
 }
-
 
 GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   GCodeState state;
@@ -748,83 +729,83 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
-    if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){
-        gcodeState->targetColor = cities[*i].stroke.color;
-        if(gcodeState->targetColor != gcodeState->currColor) {
-            for(int p = 0; p < numTools; p++){
-                if(colorInPen(penList[p], gcodeState->targetColor, penColorCount[p])){
-                    gcodeState->targetTool = p;
-                    break;
-                }
-                gcodeState->targetTool = 0;
-            }
+  if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){
+    gcodeState->targetColor = cities[*i].stroke.color;
+    if(gcodeState->targetColor != gcodeState->currColor) {
+      for(int p = 0; p < numTools; p++){
+        if(colorInPen(penList[p], gcodeState->targetColor, penColorCount[p])){
+          gcodeState->targetTool = p;
+          break;
         }
-        if(gcodeState->targetTool != gcodeState->currTool){
-            if(machineType == 0){
-                if(gcodeState->currTool >= 0){
-                    fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
-                    fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
-                    fprintf(gcode, "G0 X0\n");
-                    fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
-                    fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
-                    fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
-                    fprintf(gcode, "G0 X0\n");
-                    fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
-                    fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
-                    gcodeState->currTool = gcodeState->targetTool;
-                }
-                if(gcodeState->currTool == -1){
-                    gcodeState->currColor = penList[gcodeState->targetTool].colors[0];
-                    fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
-                    fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
-                    fprintf(gcode, "G0 X0\n");
-                    fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
-                    fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
-                }
-            } else if (machineType == 2 && (gcodeState->targetTool != 0)){
-                fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
-            }  
-            gcodeState->currTool = gcodeState->targetTool;
-        }
+        gcodeState->targetTool = 0;
+      }
     }
+    if(gcodeState->targetTool != gcodeState->currTool){
+      if(machineType == 0){
+        if(gcodeState->currTool >= 0){
+          fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+          fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
+          gcodeState->currTool = gcodeState->targetTool;
+        }
+        if(gcodeState->currTool == -1){
+          gcodeState->currColor = penList[gcodeState->targetTool].colors[0];
+          fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+        }
+      } else if (machineType == 2 && (gcodeState->targetTool != 0)){
+        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
+      }  
+      gcodeState->currTool = gcodeState->targetTool;
+    }
+  }
 }
 
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
-    if (machineType == 0){ //Lift to zero for tool dropoff after job
-        fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
-    }
-    //drop off current tool
-    if(machineType == 0){ //6Color
-        fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60); //rotate to current color slot
-        fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-        fprintf(gcode, "G1 X%f\n", gcodeState->toolChangePos); //slow move to dropoff
-        fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
-    }
+  if (machineType == 0){ //Lift to zero for tool dropoff after job
+    fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
+  }
+  //drop off current tool
+  if(machineType == 0){ //6Color
+    fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60); //rotate to current color slot
+    fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+    fprintf(gcode, "G1 X%f\n", gcodeState->toolChangePos); //slow move to dropoff
+    fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+  }
 
-    gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
-    //send paper to front
-    fprintf(gcode, "G0 X0 Y0\n");
-    if(machineType == 0){
-        fprintf(gcode, "M5\nM30\n");
-    } else if(machineType == 1 || machineType == 2){
-        fprintf(gcode,"M5\nM2\n");
-    }
-    fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
+  gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
+  //send paper to front
+  fprintf(gcode, "G0 X0 Y0\n");
+  if(machineType == 0){
+    fprintf(gcode, "M5\nM30\n");
+  } else if(machineType == 1 || machineType == 2){
+    fprintf(gcode,"M5\nM2\n");
+  }
+  fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
 }
 
 void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
-    fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
-    fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
+  fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
+  fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
 
-    if(machineType == 0 || machineType == 2) { //6Color or MVP
-        fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-        fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState->feedY);
-        fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    }
+  if(machineType == 0 || machineType == 2) { //6Color or MVP
+    fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+  }
 }
 
 //Now work on refactoring writePath.
@@ -860,7 +841,6 @@ void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settin
     //Write first point end. May want to move this section to a consolidated writeCurve method.
 
     //Ideally, calc all the X and Y points into their own separate arrays, then write through the arrays, with the option to iterate from the front vs the back. 
-
     for(j = *k; j < gcodeState->npaths; j++) {
       int level;
       if(toolPaths[j].city == cities[*i].id) {
@@ -913,6 +893,22 @@ void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settin
     fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
 
+void help() {
+  printf("usage: svg2gcode [options] svg-file gcode-file\n");
+  printf("options:\n");
+  printf("\t-Y shift Y-ax\n");
+  printf("\t-X shift X-ax\n");
+  printf("\t-f feed rate (3500)\n");
+  printf("\t-n # number of reorders (30)\n");
+  printf("\t-s scale (1.0)\n");
+  printf("\t-S 1 scale to material size\n");
+  printf("\t-C center on drawing space\n");
+  printf("\t-w final width in mm\n");
+  printf("\t-t Bezier tolerance (0.5)\n");
+  printf("\t-Z z-engage (-1.0)\n");
+  printf("\t-B do Bezier curve smoothing\n");
+  printf("\t-h this help\n");
+}
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
@@ -937,7 +933,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     help();
     return -1;
   }
-  while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
+  while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) { //I think handoff between argc and argv is happening here so can't remove for sake of opening and outputting to a file.
     switch(ch) {
     case 'h': help();
       break;
