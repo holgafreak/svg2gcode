@@ -789,10 +789,8 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
     }
 }
 
+
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
-    // if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
-    //     fprintf(gcode, "G1 Z%f F%i\n", gcodeState->ztraverse, gcodeState->zFeed);
-    // } else 
     if (machineType == 0){ //Lift to zero for tool dropoff after job
         fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
     }
@@ -828,7 +826,6 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
         fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
     }
 }
-
 
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
