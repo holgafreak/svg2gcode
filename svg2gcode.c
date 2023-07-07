@@ -827,11 +827,95 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
     }
 }
 
+void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) {
+    float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
+    int j, l; //local iterators with k <= j, l < npaths;
+
+    gcodeState->firstx = gcodeState->x = (toolPaths[*k].points[0])*settings->scale+settings->shiftX;
+    gcodeState->firsty = gcodeState->y =  (toolPaths[*k].points[1])*settings->scale+settings->shiftY;
+    
+    if(settings->svgRotation > 0){
+      //Apply transformation to center, rotate, then shift to rotated center.
+      rotatedX = rotateX(settings, gcodeState->firstx, gcodeState->firsty);
+      rotatedY = rotateY(settings, gcodeState->firstx, gcodeState->firsty);
+      gcodeState->firstx = gcodeState->x = rotatedX;
+      gcodeState->firsty = gcodeState->y = rotatedY;
+    }
+    //End calculating first point.
+
+    //Update state for first move.
+    gcodeState->y = gcodeState->firsty = -gcodeState->firsty;
+    gcodeState->cityStart = 0;
+    gcodeState->xold, gcodeState->bxold = gcodeState->x;
+    gcodeState->yold, gcodeState->byold = gcodeState->y;
+    //End update state for first move
+    
+    //Write first point
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( FirstPoint: toolPaths[%i].city == cities[%i].id == %i )\n", *k, *i, cities[*i].id);
+#endif
+    fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
+    //Write first point end. May want to move this section to a consolidated writeCurve method.
+
+    //Ideally, calc all the X and Y points into their own separate arrays, then write through the arrays, with the option to iterate from the front vs the back. 
+
+    for(j = *k; j < gcodeState->npaths; j++) {
+      int level;
+      if(toolPaths[j].city == cities[*i].id) {
+#ifdef DEBUG_OUTPUT
+        fprintf(gcode, "( toolPaths[%i].city == cities[%i].id == %i )\n", j, *i, cities[*i].id);
+#endif
+        //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
+        bezCount = 0;
+        level = 0;
+        collinear = 0;
+        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
+
+        for(l = 0; l < bezCount; l++) {
+          gcodeState->bx = (bezPoints[l].x)*settings->scale+settings->shiftX;
+          gcodeState->by = (bezPoints[l].y)*settings->scale+settings->shiftY;
+
+          //ROTATION FOR bx and by
+          if(settings->svgRotation > 0){
+            //Apply transformation to center
+            rotatedBX = rotateX(settings, gcodeState->bx, gcodeState->by);
+            rotatedBY = rotateY(settings, gcodeState->bx, gcodeState->by);
+            gcodeState->bx = rotatedBX;
+            gcodeState->by = rotatedBY;
+          }
+
+          gcodeState->by = -gcodeState->by;
+
+          gcodeState->d = distanceBetweenPoints(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by);
+          gcodeState->totalDist += gcodeState->d;
+
+          gcodeState->tempFeed = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by));
+          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState->bx, gcodeState->by, gcodeState->tempFeed);
+
+          gcodeState->bxold = gcodeState->bx;
+          gcodeState->byold = gcodeState->by;
+        } 
+        toolPaths[j].city = -1; // This path has been written
+      } else {
+        break;
+      }
+    }
+    if(toolPaths[j].closed) { //Line back to first point if path is closed.
+      gcodeState->tempFeed = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by));
+      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->firstx, gcodeState->firsty, gcodeState->tempFeed);
+      gcodeState->bxold = gcodeState->firstx;
+      gcodeState->byold = gcodeState->firsty;
+      gcodeState->xold = gcodeState->firstx;
+      gcodeState->yold = gcodeState->firsty;
+    }
+    fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
+}
+
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
-  int i,j,k,l = 1;
-  float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
+  int i, j, k, l = 1;
   SVGPoint* points;
   ToolPath* toolPaths;
   City *cities; //Corresponds to an NSVGPath
@@ -923,25 +1007,21 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
   printf("\n");
 
-      //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
+  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting cities by color\n");
   int mergeCount = 0;
-  int* mergeLevel = &mergeCount; 
-  mergeSort(cities, 0, pathCount-1, 0, mergeLevel); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  mergeSort(cities, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   //End sorting.
 
   //Break into writeHeader method.
   writeHeader(&gcodeState, gcode, machineType, paperDimensions);
 
-  k=0;
-  i=0;
-
-  //WRITING PATHS BEGINS HERE
+  //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
 
     gcodeState.cityStart=1;
     for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
-                            //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
+                                          //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(toolPaths[k].city == -1){ //means already written. Go back to start of above for loop and check next.
           continue;
       } else if(toolPaths[k].city == cities[i].id) {
@@ -957,89 +1037,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
     //WRITING MOVES FOR DRAWING 
-    //Calculating first point.
-    gcodeState.firstx = gcodeState.x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
-    gcodeState.firsty = gcodeState.y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
-
-    if(settings.svgRotation > 0){
-      //Apply transformation to center, rotate, then shift to rotated center.
-      rotatedX = rotateX(&settings, gcodeState.firstx, gcodeState.firsty);
-      rotatedY = rotateY(&settings, gcodeState.firstx, gcodeState.firsty);
-      gcodeState.firstx = gcodeState.x = rotatedX;
-      gcodeState.firsty = gcodeState.y = rotatedY;
-    }
-    //End calculating first point.
-
-    //Update state for first move.
-    gcodeState.y = gcodeState.firsty = -gcodeState.firsty;
-    gcodeState.cityStart = 0;
-    gcodeState.xold, gcodeState.bxold = gcodeState.x;
-    gcodeState.yold, gcodeState.byold = gcodeState.y;
-    //End update state for first move
-    
-    //Write first point
-#ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( FirstPoint: toolPaths[%i].city == cities[%i].id == %i )\n", k, i, cities[i].id);
-#endif
-    fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState.x, gcodeState.y);
-    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.zFloor, gcodeState.zFeed);
-    //Write first point end. May want to move this section to a consolidated writeCurve method.
-
-    //Ideally, calc all the X and Y points into their own separate arrays, then write through the arrays, with the option to iterate from the front vs the back. 
-
-    for(j = k; j < gcodeState.npaths; j++) {
-      int level;
-      if(toolPaths[j].city == cities[i].id) {
-#ifdef DEBUG_OUTPUT
-        fprintf(gcode, "( toolPaths[%i].city == cities[%i].id == %i )\n", j, i, cities[i].id);
-#endif
-        //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
-        bezCount = 0;
-        level = 0;
-        collinear = 0;
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState.tol, level);
-
-        for(l = 0; l < bezCount; l++) {
-          gcodeState.bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
-          gcodeState.by = (bezPoints[l].y)*settings.scale+settings.shiftY;
-
-          //ROTATION FOR bx and by
-          if(settings.svgRotation > 0){
-            //Apply transformation to center
-            rotatedBX = rotateX(&settings, gcodeState.bx, gcodeState.by);
-            rotatedBY = rotateY(&settings, gcodeState.bx, gcodeState.by);
-            gcodeState.bx = rotatedBX;
-            gcodeState.by = rotatedBY;
-          }
-
-          gcodeState.by = -gcodeState.by;
-
-          gcodeState.d = distanceBetweenPoints(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by);
-          gcodeState.totalDist += gcodeState.d;
-
-          gcodeState.tempFeed = interpFeedrate(gcodeState.feed, gcodeState.feedY, absoluteSlope(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by));
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState.bx, gcodeState.by, gcodeState.tempFeed);
-
-          gcodeState.bxold = gcodeState.bx;
-          gcodeState.byold = gcodeState.by;
-        } 
-        toolPaths[j].city = -1; // This path has been written
-      } else {
-        break;
-      }
-    }
-    if(toolPaths[j].closed) { //Line back to first point if path is closed.
-      gcodeState.tempFeed = interpFeedrate(gcodeState.feed, gcodeState.feedY, absoluteSlope(gcodeState.bxold, gcodeState.byold, gcodeState.bx, gcodeState.by));
-      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState.firstx, gcodeState.firsty, gcodeState.tempFeed);
-      gcodeState.bxold = gcodeState.firstx;
-      gcodeState.byold = gcodeState.firsty;
-      gcodeState.xold = gcodeState.firstx;
-      gcodeState.yold = gcodeState.firsty;
-    }
-    fprintf(gcode, "G1 Z%f F%d\n", gcodeState.ztraverse, gcodeState.zFeed);
-    //END WRITING MOVES FOR DRAWING SECTION
+    writePath(gcode, &gcodeState, &settings, cities, toolPaths, &machineType, &k, &i);
   }
-
+  
   writeFooter(&gcodeState, gcode, machineType);
 
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", gcodeState.totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
