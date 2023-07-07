@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 
@@ -827,6 +827,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
     }
 }
 
+//Now work on refactoring writePath.
 void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) {
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
@@ -1018,7 +1019,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
-
     gcodeState.cityStart=1;
     for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
                                           //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
