@@ -856,33 +856,42 @@ void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settin
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
     gcodeState->pathPoints[1] = toolPaths[*k].points[1];
     for(j = *k; j < gcodeState->npaths; j++) {
-      int level;
-      if(toolPaths[j].city == cities[*i].id) {
-        bezCount = 0;
-        level = 0;
-        pathPointsIndex = 2; //think error is here with pathPointsIndex count
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
+        pathPointsIndex = 2;
+        int level;
+        if(toolPaths[j].city == cities[*i].id) {
+            bezCount = 0;
+            level = 0;
+            cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
+            for(l = 0; l < bezCount; l++) {
+              //unscaled and un-rotated bez points into pathPoints.
+              gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
+              gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
+#ifdef DEBUG_OUTPUT
+              fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
+#endif
+              pathPointsIndex += 2;
+            }
 
-        for(l = 0; l < bezCount; l++) {
-          //unscaled and un-rotated bez points into pathPoints.
-          gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
-          gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
-          pathPointsIndex += 2;
-        } 
-        toolPaths[j].city = -1; // This path has been written
-      } else {
-        break;
-      }
+            toolPaths[j].city = -1; // This path has been written
+        } else {
+            break;
+        }
     }
     char isClosed = toolPaths[j].closed;
-    //Now, write out points from pathPoints here.
-    //writePoint
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, " ( PathPointsIndex = %i)\n ", pathPointsIndex);
+#endif
+
+
+    // Iterate over the entire pathPoints array from start to pathPointsIndex
     for(int z = 0; z < pathPointsIndex; z += 2){
+
         writePoint(gcode, gcodeState, settings, &z, &isClosed);
     }
 
     fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
+
 
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
