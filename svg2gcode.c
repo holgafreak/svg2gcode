@@ -45,9 +45,11 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
+#define MAXINT(a,b) (((a)>(b))?(a):(b))
+
 
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
@@ -129,6 +131,7 @@ typedef struct GCodeState {
     float toolChangePos;
     float tol;
     int numReord;
+    int maxPaths;
     float x;
     float y;
     float bx;
@@ -141,6 +144,7 @@ typedef struct GCodeState {
     double totalDist;
     float xold;
     float yold;
+    float * pathPoints;
 } GCodeState;
 
 SVGPoint bezPoints[maxBez];
@@ -291,11 +295,10 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* cities, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, City* cities, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
-  SVGPoint* pts;
   bezCount = 0;
   i = 0;
   k = 0;
@@ -318,24 +321,26 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* citi
         }
         paths[k].closed = path->closed;
         paths[k].city = i;
+        cities[i].numToolpaths++;
         k++;
       }
       cont:
       if (k > pointsCount) {
         printf("Error: k > pointsCount\n");
-        *npaths = 0;
+        state->npaths = 0;
         return;
       }
       if (i > pathCount) {
         printf("Error: i > pathCount\n");
         exit(-1);
       }
+      state->maxPaths = MAXINT(cities[i].numToolpaths, state->maxPaths);
       i++;
     }
     j++;
     shapeCount++;
   }
-  *npaths = k;
+  state->npaths = k;
 }
 
 
@@ -710,18 +715,19 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
     state.numReord = 10;
   }
 
+  state.maxPaths = 0;
   state.xold = 0;
   state.yold = 0;
 
   state.npaths = 0;
-  state.x = -FLT_MAX;
-  state.y = -FLT_MAX;
-  state.bx = -FLT_MAX;
-  state.by = -FLT_MAX;
-  state.bxold = -FLT_MAX;
-  state.byold = -FLT_MAX;
-  state.firstx = -FLT_MAX;
-  state.firsty = -FLT_MAX;
+  state.x = 0;
+  state.y = 0;
+  state.bx = 0;
+  state.by = 0;
+  state.bxold = 0;
+  state.byold = 0;
+  state.firstx = 0;
+  state.firsty = 0;
   state.d = -FLT_MAX;
   state.totalDist = 0;
 
@@ -792,6 +798,9 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
     fprintf(gcode,"M5\nM2\n");
   }
   fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
+#ifdef DEBUG_OUTPUT
+  fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
+#endif
 }
 
 void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
@@ -808,88 +817,70 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
   }
 }
 
-//Now work on refactoring writePath.
-void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) {
-    float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-    int j, l; //local iterators with k <= j, l < npaths;
-
-    gcodeState->firstx = gcodeState->x = (toolPaths[*k].points[0])*settings->scale+settings->shiftX;
-    gcodeState->firsty = gcodeState->y =  (toolPaths[*k].points[1])*settings->scale+settings->shiftY;
+void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed) {
+    float rotatedX, rotatedY;
     
+    // Get the unscaled and unrotated coordinates from pathPoints
+    float x = gcodeState->pathPoints[*ptIndex];
+    float y = gcodeState->pathPoints[(*ptIndex)+1];
+    
+    // Scale and shift the coordinates
+    float scaledX = x*settings->scale + settings->shiftX;
+    float scaledY = y*settings->scale + settings->shiftY;
+    
+    // Rotate the coordinates if needed
     if(settings->svgRotation > 0){
-      //Apply transformation to center, rotate, then shift to rotated center.
-      rotatedX = rotateX(settings, gcodeState->firstx, gcodeState->firsty);
-      rotatedY = rotateY(settings, gcodeState->firstx, gcodeState->firsty);
-      gcodeState->firstx = gcodeState->x = rotatedX;
-      gcodeState->firsty = gcodeState->y = rotatedY;
+        rotatedX = rotateX(settings, scaledX, scaledY);
+        rotatedY = rotateY(settings, scaledX, scaledY);
+    } else {
+        rotatedX = scaledX;
+        rotatedY = scaledY;
     }
-    //End calculating first point.
-
-    //Update state for first move.
-    gcodeState->y = gcodeState->firsty = -gcodeState->firsty;
-    gcodeState->cityStart = 0;
-    gcodeState->xold, gcodeState->bxold = gcodeState->x;
-    gcodeState->yold, gcodeState->byold = gcodeState->y;
-    //End update state for first move
+    rotatedY = -rotatedY;
     
-    //Write first point
-#ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( FirstPoint: toolPaths[%i].city == cities[%i].id == %i )\n", *k, *i, cities[*i].id);
-#endif
-    fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
-    fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
-    //Write first point end. May want to move this section to a consolidated writeCurve method.
+    // Update the state
+    gcodeState->xold = gcodeState->x;
+    gcodeState->yold = gcodeState->y;
+    gcodeState->x = rotatedX;
+    gcodeState->y = rotatedY;
 
-    //Ideally, calc all the X and Y points into their own separate arrays, then write through the arrays, with the option to iterate from the front vs the back. 
+    fprintf(gcode,"G1 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+}
+
+
+//Now work on refactoring writePath.
+void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) { //k is index in toolPaths. i is index i cities.
+    float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
+    int j, l, pathPointsIndex; //local iterators with k <= j, l < npaths;
+
+    gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
+    gcodeState->pathPoints[1] = toolPaths[*k].points[1];
     for(j = *k; j < gcodeState->npaths; j++) {
       int level;
       if(toolPaths[j].city == cities[*i].id) {
-#ifdef DEBUG_OUTPUT
-        fprintf(gcode, "( toolPaths[%i].city == cities[%i].id == %i )\n", j, *i, cities[*i].id);
-#endif
-        //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
         bezCount = 0;
         level = 0;
-        collinear = 0;
+        pathPointsIndex = 2; //think error is here with pathPointsIndex count
         cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
 
         for(l = 0; l < bezCount; l++) {
-          gcodeState->bx = (bezPoints[l].x)*settings->scale+settings->shiftX;
-          gcodeState->by = (bezPoints[l].y)*settings->scale+settings->shiftY;
-
-          //ROTATION FOR bx and by
-          if(settings->svgRotation > 0){
-            //Apply transformation to center
-            rotatedBX = rotateX(settings, gcodeState->bx, gcodeState->by);
-            rotatedBY = rotateY(settings, gcodeState->bx, gcodeState->by);
-            gcodeState->bx = rotatedBX;
-            gcodeState->by = rotatedBY;
-          }
-
-          gcodeState->by = -gcodeState->by;
-
-          gcodeState->d = distanceBetweenPoints(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by);
-          gcodeState->totalDist += gcodeState->d;
-
-          gcodeState->tempFeed = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by));
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", gcodeState->bx, gcodeState->by, gcodeState->tempFeed);
-
-          gcodeState->bxold = gcodeState->bx;
-          gcodeState->byold = gcodeState->by;
+          //unscaled and un-rotated bez points into pathPoints.
+          gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
+          gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
+          pathPointsIndex += 2;
         } 
         toolPaths[j].city = -1; // This path has been written
       } else {
         break;
       }
     }
-    if(toolPaths[j].closed) { //Line back to first point if path is closed.
-      gcodeState->tempFeed = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->bxold, gcodeState->byold, gcodeState->bx, gcodeState->by));
-      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->firstx, gcodeState->firsty, gcodeState->tempFeed);
-      gcodeState->bxold = gcodeState->firstx;
-      gcodeState->byold = gcodeState->firsty;
-      gcodeState->xold = gcodeState->firstx;
-      gcodeState->yold = gcodeState->firsty;
+    char isClosed = toolPaths[j].closed;
+    //Now, write out points from pathPoints here.
+    //writePoint
+    for(int z = 0; z < pathPointsIndex; z += 2){
+        writePoint(gcode, gcodeState, settings, &z, &isClosed);
     }
+
     fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
 
@@ -993,7 +984,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   memset(cities, 0, pathCount*sizeof(City));
   gcodeState.npaths = 0;
 
-  calcPaths(points, toolPaths, &gcodeState.npaths, cities, debug);
+  calcPaths(points, toolPaths, &gcodeState, cities, debug);
+  //alloc a worst case array for storing calculated draw points
+  //malloc for (maxPathsinCity * maxNumberofPointsperBez * xandy * sizeofInt)
+  gcodeState.pathPoints = malloc(gcodeState.maxPaths * maxBez * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
+  if (gcodeState.pathPoints == NULL) {
+    printf("Memory allocation failed!\n");
+    exit(1);
+  }
 
   //Sorting cities for path optimization
   printf("Reorder with numCities: %d\n",pathCount);
@@ -1039,6 +1037,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   writeFooter(&gcodeState, gcode, machineType);
 
   printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", gcodeState.totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
+  free(gcodeState.pathPoints);
   fclose(gcode);
   free(points);
   free(toolPaths);
