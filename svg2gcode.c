@@ -134,10 +134,6 @@ typedef struct GCodeState {
     int maxPaths;
     float x;
     float y;
-    float bx;
-    float by;
-    float bxold;
-    float byold;
     float firstx;
     float firsty;
     double d;
@@ -671,10 +667,6 @@ void printGCodeState(GCodeState* state) {
   printf("numReord: %d\n", state->numReord);
   printf("x: %f\n", state->x);
   printf("y: %f\n", state->y);
-  printf("bx: %f\n", state->bx);
-  printf("by: %f\n", state->by);
-  printf("bxold: %f\n", state->bxold);
-  printf("byold: %f\n", state->byold);
   printf("firstx: %f\n", state->firstx);
   printf("firsty: %f\n", state->firsty);
   printf("d: %lf\n", state->d);
@@ -722,16 +714,20 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.npaths = 0;
   state.x = 0;
   state.y = 0;
-  state.bx = 0;
-  state.by = 0;
-  state.bxold = 0;
-  state.byold = 0;
   state.firstx = 0;
   state.firsty = 0;
   state.d = -FLT_MAX;
   state.totalDist = 0;
 
   return state;
+}
+
+void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%d F%f\n", gcodeState->zFloor, gcodeState->zFeed);
+}
+
+void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
@@ -770,7 +766,9 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         }
       } else if (machineType == 2 && (gcodeState->targetTool != 0)){
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
-      }  
+      }
+      toolUp(gcode, gcodeState, &machineType);
+      gcodeState->x = 0;
       gcodeState->currTool = gcodeState->targetTool;
     }
   }
@@ -817,17 +815,8 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
   }
 }
 
-
-void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G1 Z%d F%f\n", gcodeState->zFloor, gcodeState->zFeed);
-}
-
-void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
-}
-
 void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType) {
-    float rotatedX, rotatedY;
+    float rotatedX, rotatedY, feedRate;
     
     // Get the unscaled and unrotated coordinates from pathPoints
     float x = gcodeState->pathPoints[*ptIndex];
@@ -847,15 +836,21 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     rotatedY = -rotatedY;
     
-    // Update the state
+    //Track current and previous position
     gcodeState->xold = gcodeState->x;
     gcodeState->yold = gcodeState->y;
     gcodeState->x = rotatedX;
     gcodeState->y = rotatedY;
 
-    fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y);
+    if((gcodeState->xold != gcodeState->x) || (gcodeState->yold != gcodeState->x)){ //not duplicate point
+      feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
+      fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
+    }
 
-    if(*ptIndex == 0){//Drop tool down after moving to first point.
+    if(*ptIndex == 0){//Drop tool down after moving to first point and set firstX and firstY. No longer city start
+      gcodeState->cityStart = 0;
+      gcodeState->firstx = rotatedX;
+      gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
     }
 }
@@ -893,6 +888,8 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
 #endif
+    //Set city start
+    gcodeState->cityStart = 1;
 
     // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
     for(int z = 0; z < pathPointsIndex; z += 2){
@@ -1037,7 +1034,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
                                           //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(toolPaths[k].city == -1){ //means already written. Go back to start of above for loop and check next.
           continue;
-      } else if(toolPaths[k].city == cities[i].id) {
+      } else if(toolPaths[k].city == cities[i].id) { //Condition found for writing a city.
         break;
       }
     }
