@@ -817,7 +817,16 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
   }
 }
 
-void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed) {
+
+void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%d F%f\n", gcodeState->zFloor, gcodeState->zFeed);
+}
+
+void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
+}
+
+void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType) {
     float rotatedX, rotatedY;
     
     // Get the unscaled and unrotated coordinates from pathPoints
@@ -844,12 +853,15 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     gcodeState->x = rotatedX;
     gcodeState->y = rotatedY;
 
-    fprintf(gcode,"G1 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+    fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y);
+
+    if(*ptIndex == 0){//Drop tool down after moving to first point.
+      toolDown(gcode, gcodeState, machineType);
+    }
 }
 
-
 //Now work on refactoring writeShape.
-void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) { //k is index in toolPaths. i is index i cities.
+void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l, pathPointsIndex; //local iterators with k <= j, l < npaths;
 
@@ -867,7 +879,7 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
               gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
               gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
 #ifdef DEBUG_OUTPUT
-              fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
+              //fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
 #endif
               pathPointsIndex += 2;
             }
@@ -879,16 +891,15 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     char isClosed = toolPaths[j].closed;
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, " ( PathPointsIndex = %i)\n ", pathPointsIndex);
+    fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
 #endif
 
-
-    // Iterate over the entire pathPoints array from start to pathPointsIndex
+    // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
     for(int z = 0; z < pathPointsIndex; z += 2){
-        writePoint(gcode, gcodeState, settings, &z, &isClosed);
+        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
     }
-
-    fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
+    //Pick tool up to traversal height.
+    toolUp(gcode, gcodeState, machineTypePtr);
 }
 
 
