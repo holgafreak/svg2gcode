@@ -845,6 +845,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     if((gcodeState->xold != gcodeState->x) || (gcodeState->yold != gcodeState->x)){ //not duplicate point
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
+      
     }
 
     if(*ptIndex == 0){//Drop tool down after moving to first point and set firstX and firstY. No longer city start
@@ -852,6 +853,11 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
+    } else { //not first point in a path.
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "( ADDING DELTA D TO DISTANCE )\n");
+#endif
+      gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
     }
 }
 
