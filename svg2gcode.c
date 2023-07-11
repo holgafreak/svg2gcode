@@ -583,11 +583,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
 
-  // Adjust for certain machine types
-  if (generationConfig[3] == 0) {
-      settings.shiftX += sixColorWidth - paperDimensions[0];
-  }
-
   // Calculate center of scaled and rotated drawing. 
   settings.centerX = settings.shiftX + settings.drawingWidth / 2;
   settings.centerY = settings.shiftY + settings.drawingHeight / 2;
@@ -609,7 +604,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 }
 
 void printTransformSettings(TransformSettings settings) {
-  printf("scale: %f\n", settings.scale);
+  printf("\n\nscale: %f\n", settings.scale);
   printf("drawingWidth: %f\n", settings.drawingWidth);
   printf("drawingHeight: %f\n", settings.drawingHeight);
   printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
@@ -627,7 +622,7 @@ void printTransformSettings(TransformSettings settings) {
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
-  printf("svgRotation: %d\n", settings.svgRotation);
+  printf("svgRotation: %d\n\n", settings.svgRotation);
 }
 
 float rotateX(TransformSettings* settings, float firstx, float firsty) {
