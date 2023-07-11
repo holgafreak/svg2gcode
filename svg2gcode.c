@@ -848,15 +848,15 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 }
 
 
-//Now work on refactoring writePath.
-void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) { //k is index in toolPaths. i is index i cities.
+//Now work on refactoring writeShape.
+void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineType, int * k, int * i) { //k is index in toolPaths. i is index i cities.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l, pathPointsIndex; //local iterators with k <= j, l < npaths;
 
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
     gcodeState->pathPoints[1] = toolPaths[*k].points[1];
+    pathPointsIndex = 2;
     for(j = *k; j < gcodeState->npaths; j++) {
-        pathPointsIndex = 2;
         int level;
         if(toolPaths[j].city == cities[*i].id) {
             bezCount = 0;
@@ -885,7 +885,6 @@ void writePath(FILE * gcode, GCodeState * gcodeState, TransformSettings * settin
 
     // Iterate over the entire pathPoints array from start to pathPointsIndex
     for(int z = 0; z < pathPointsIndex; z += 2){
-
         writePoint(gcode, gcodeState, settings, &z, &isClosed);
     }
 
@@ -1040,7 +1039,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
     //WRITING MOVES FOR DRAWING 
-    writePath(gcode, &gcodeState, &settings, cities, toolPaths, &machineType, &k, &i);
+    writeShape(gcode, &gcodeState, &settings, cities, toolPaths, &machineType, &k, &i);
   }
   
   writeFooter(&gcodeState, gcode, machineType);
