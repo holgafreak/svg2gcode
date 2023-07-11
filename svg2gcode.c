@@ -858,11 +858,10 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 //Now work on refactoring writeShape.
 void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-    int j, l, pathPointsIndex; //local iterators with k <= j, l < npaths;
-
+    int j, l; //local iterators with k <= j, l < npaths;
+    int pathPointsIndex = 2;
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
     gcodeState->pathPoints[1] = toolPaths[*k].points[1];
-    pathPointsIndex = 2;
     for(j = *k; j < gcodeState->npaths; j++) {
         int level;
         if(toolPaths[j].city == cities[*i].id) {
