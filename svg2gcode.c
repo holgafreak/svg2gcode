@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
@@ -950,7 +950,6 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 #endif
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     if(sp) { //sp == 1 if endpoint of shape is closer to current pos.
-      fprintf(gcode, " ( ENDPOINT IS CLOSER )\n ");
       for(int z = pathPointsIndex-2; z >= 0; z -= 2){ //Iterate through backwards if endpoint is closer.
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
       }
