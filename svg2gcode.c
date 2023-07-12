@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
@@ -850,7 +850,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       toolDown(gcode, gcodeState, machineType);
     } else { //not first point in a path.
 #ifdef DEBUG_OUTPUT
-      fprintf(gcode, "( ADDING DELTA D TO DISTANCE )\n");
+      //fprintf(gcode, "( ADDING DELTA D TO DISTANCE )\n");
 #endif
       gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
     }
