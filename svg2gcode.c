@@ -810,7 +810,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
   }
 }
 
-void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType) {
+void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
     float rotatedX, rotatedY, feedRate;
     
     // Get the unscaled and unrotated coordinates from pathPoints
@@ -842,15 +842,12 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
     }
 
-    if(*ptIndex == 0){//Drop tool down after moving to first point and set firstX and firstY. No longer city start
+    if((*sp == 0 && *ptIndex == 0) || (*sp == 1 && *ptIndex == *pathPointIndex -2)){ //first point written in path
       gcodeState->cityStart = 0;
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
     } else { //not first point in a path.
-#ifdef DEBUG_OUTPUT
-      //fprintf(gcode, "( ADDING DELTA D TO DISTANCE )\n");
-#endif
       gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
     }
 }
@@ -891,9 +888,11 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
 void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
-    int pathPointsIndex = 2;
+    
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
-    gcodeState->pathPoints[1] = toolPaths[*k].points[1];
+    gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path.
+
+    int pathPointsIndex = 2;
     for(j = *k; j < gcodeState->npaths; j++) {
         int level;
         if(toolPaths[j].city == cities[*i].id) {
@@ -907,7 +906,7 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 #ifdef DEBUG_OUTPUT
               //fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
 #endif
-              pathPointsIndex += 2;
+              pathPointsIndex += 2; //pathPointsIndex-2 is x of endpoint
             }
 
             toolPaths[j].city = -1; // This path has been written
@@ -949,15 +948,16 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
 #endif
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
-    if(sp) { //sp == 1 if endpoint of shape is closer to current pos.
-      for(int z = pathPointsIndex-2; z >= 0; z -= 2){ //Iterate through backwards if endpoint is closer.
-        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
+    if(sp){
+      for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
+        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
-    } else { //write from startpoint
+    } else {
       for(int z = 0; z < pathPointsIndex; z += 2){
-          writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
+        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
     }
+
     //Pick tool up to traversal height.
     toolUp(gcode, gcodeState, machineTypePtr);
 }
