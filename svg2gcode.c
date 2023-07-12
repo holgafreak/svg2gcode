@@ -86,7 +86,7 @@ typedef struct {
 typedef struct {
   int id;
   int numToolpaths;
-  NSVGpaint stroke;
+  unsigned int stroke;
 } City;
 
 typedef struct TransformSettings {
@@ -123,7 +123,7 @@ typedef struct GCodeState {
     float zFloor;
     float ztraverse;
     char xy;
-    int currColor;
+    unsigned int currColor;
     int targetColor;
     int targetTool;
     int currTool;
@@ -136,7 +136,6 @@ typedef struct GCodeState {
     float y;
     float firstx;
     float firsty;
-    double d;
     double totalDist;
     float xold;
     float yold;
@@ -304,7 +303,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Cit
   for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
     for (path = shape->paths; path != NULL; path = path->next) {
       cities[i].id = i;
-      cities[i].stroke = shape->stroke;
+      cities[i].stroke = shape->stroke.color;
       for (j = 0; j < path->npts - 1; j += 3) {
         float* pp = &path->pts[j * 2];
         if (j == 0) {
@@ -359,7 +358,7 @@ void merge(City * arr, int left, int mid, int right) {
 
     int i = 0, j = 0, k = left;
     while (i < n1 && j < n2) {
-        if (leftArr[i].stroke.color <= rightArr[j].stroke.color) {
+        if (leftArr[i].stroke <= rightArr[j].stroke) {
             arr[k] = leftArr[i];
             i++;
         } else {
@@ -456,7 +455,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
 //sort array by color defined int.
 int colorComp(const City * a, const City * b) {
   const City *A = a, *B = b;
-  int x = A->stroke.color, y = B->stroke.color;
+  int x = A->stroke, y = B->stroke;
   return (x > y) - (x < y);
 }
 
@@ -664,7 +663,6 @@ void printGCodeState(GCodeState* state) {
   printf("y: %f\n", state->y);
   printf("firstx: %f\n", state->firstx);
   printf("firsty: %f\n", state->firsty);
-  printf("d: %lf\n", state->d);
   printf("totalDist: %lf\n", state->totalDist);
   printf("xold: %f\n", state->xold);
   printf("yold: %f\n", state->yold);
@@ -680,7 +678,7 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.zFeed = generationConfig[7];
   state.tempFeed = 0;
   state.slowTravel = 3500;
-  state.cityStart = -1;
+  state.cityStart = 1;
   state.zFloor = paperDimensions[4];
   state.ztraverse = paperDimensions[5];
   state.xy = 1;
@@ -711,7 +709,6 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.y = 0;
   state.firstx = 0;
   state.firsty = 0;
-  state.d = -FLT_MAX;
   state.totalDist = 0;
 
   return state;
@@ -726,8 +723,8 @@ void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
-  if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){
-    gcodeState->targetColor = cities[*i].stroke.color;
+  if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){ //All machines will want to check for tool change.
+    gcodeState->targetColor = cities[*i].stroke;
     if(gcodeState->targetColor != gcodeState->currColor) {
       for(int p = 0; p < numTools; p++){
         if(colorInPen(penList[p], gcodeState->targetColor, penColorCount[p])){
@@ -737,8 +734,11 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         gcodeState->targetTool = 0;
       }
     }
-    if(gcodeState->targetTool != gcodeState->currTool){
-      if(machineType == 0){
+    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange is neccesary.
+#ifdef DEBUG_OUTPUT
+  fprintf(gcode, "( Beginning Toolchange process. )\n");
+#endif
+      if(machineType == 0){ //Actual tool change code per machine type. LFP and MVP will want to have Pause command for fluidncc
         if(gcodeState->currTool >= 0){
           fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
@@ -899,6 +899,41 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     toolUp(gcode, gcodeState, machineTypePtr);
 }
 
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
+    int i, j;
+
+    printf("argc:\n\t%d\n", argc);
+
+    printf("argv:\n");
+    for(i = 0; i < argc; i++) {
+        printf("\t%d: %s\n", i, argv[i]);
+    }
+
+    printf("penColors:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: ", i);
+        for(j = 0; j < penColorCount[i]; j++) {
+            printf("%d ", penColors[i][j]);
+        }
+        printf("\n");
+    }
+
+    printf("penColorCount:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: %d\n", i, penColorCount[i]);
+    }
+
+    printf("paperDimensions:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: %.2f\n", i, paperDimensions[i]);
+    }
+
+    printf("generationConfig:\n");
+    for(i = 0; i < 9; i++) {
+        printf("\t%d: %d\n", i, generationConfig[i]);
+    }
+}
+
 
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
@@ -919,6 +954,9 @@ void help() {
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
+#ifdef DEBUG_OUTPUT
+  printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
+#endif
   int i, j, k, l = 1;
   SVGPoint* points;
   ToolPath* toolPaths;
@@ -974,6 +1012,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     penList[i].colors = penColors[i]; //assign penList[i].colors to the pointer passed in from penColors (there are numtools poiners to assign.)
   }
 
+  //
   calcBounds(g_image, numTools, penList, penColorCount);
   //Settings and calculations for rotation + transformation.
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
@@ -1042,7 +1081,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       printf("Continue hit\n");
       continue;
     }
-
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( City %d at i:%d. Color: %i )\n", cities[i].id, i, cities[i].stroke);
+#endif
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
