@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
@@ -840,7 +840,6 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     if((gcodeState->xold != gcodeState->x) || (gcodeState->yold != gcodeState->x)){ //not duplicate point
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
-      
     }
 
     if(*ptIndex == 0){//Drop tool down after moving to first point and set firstX and firstY. No longer city start
@@ -854,6 +853,38 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 #endif
       gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
     }
+}
+
+int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
+    int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
+    float rx1, rx2, ry1, ry2;
+    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+
+    if(settings->svgRotation > 0) {
+        rx1 = rotateX(settings, x1, y1);
+        ry1 = rotateY(settings, x1, y1);
+        rx2 = rotateX(settings, x2, y2);
+        ry2 = rotateY(settings, x2, y2);
+    } else {
+        rx1 = x1;
+        ry1 = y1;
+        rx2 = x2;
+        ry2 = y2;
+    }
+    
+    ry1 = -ry1;
+    ry2 = -ry2;
+    
+    float distFromStart = distanceBetweenPoints(rx1, ry1, gcodeState->x, gcodeState->y);
+    float distFromEnd = distanceBetweenPoints(rx2, ry2, gcodeState->x, gcodeState->y);
+    if (distFromEnd < distFromStart){
+      res = 1;
+    }
+
+    return res;
 }
 
 //Now work on refactoring writeShape.
@@ -892,8 +923,41 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     gcodeState->cityStart = 1;
 
     // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
-    for(int z = 0; z < pathPointsIndex; z += 2){
+    //We want to either iterate from the front or back of the array, depending on which point is closer.
+
+    //checking for correct first and last point selection.
+#ifdef DEBUG_OUTPUT
+    float rx1, rx2, ry1, ry2;
+    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+    if(settings->svgRotation > 0){
+        rx1 = rotateX(settings, x1, y1);
+        ry1 = rotateY(settings, x1, y1);
+        rx2 = rotateX(settings, x2, y2);
+        ry2 = rotateY(settings, x2, y2);
+    } else {
+        rx1 = x1;
+        rx2 = x2;
+        ry1 = y1;
+        ry2 = y2;
+    }
+    ry1 = -ry1;
+    ry2 = -ry2;
+
+    fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
+#endif
+    int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
+    if(sp) { //sp == 1 if endpoint of shape is closer to current pos.
+      fprintf(gcode, " ( ENDPOINT IS CLOSER )\n ");
+      for(int z = pathPointsIndex-2; z >= 0; z -= 2){ //Iterate through backwards if endpoint is closer.
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
+      }
+    } else { //write from startpoint
+      for(int z = 0; z < pathPointsIndex; z += 2){
+          writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr);
+      }
     }
     //Pick tool up to traversal height.
     toolUp(gcode, gcodeState, machineTypePtr);
