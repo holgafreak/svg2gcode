@@ -86,7 +86,7 @@ typedef struct {
 typedef struct {
   int id;
   int numToolpaths;
-  unsigned int stroke;
+  int stroke;
 } City;
 
 typedef struct TransformSettings {
@@ -123,7 +123,7 @@ typedef struct GCodeState {
     float zFloor;
     float ztraverse;
     char xy;
-    unsigned int currColor;
+    int currColor;
     int targetColor;
     int targetTool;
     int currTool;
@@ -682,7 +682,7 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.zFloor = paperDimensions[4];
   state.ztraverse = paperDimensions[5];
   state.xy = 1;
-  state.currColor = 1;
+  state.currColor = 0;
   state.targetColor = 0;
   state.targetTool = 0;
   state.currTool = -1;
@@ -723,12 +723,15 @@ void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
-  if(gcodeState->cityStart == 1 && (machineType == 0 || machineType == 2)){ //All machines will want to check for tool change.
+  if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = cities[*i].stroke;
-    if(gcodeState->targetColor != gcodeState->currColor) {
-      for(int p = 0; p < numTools; p++){
-        if(colorInPen(penList[p], gcodeState->targetColor, penColorCount[p])){
-          gcodeState->targetTool = p;
+    if(cities[*i].stroke != gcodeState->currColor) { //Stroke of upcoming city is not the currently held tool's color.
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "( City stroke:%i currColor:%i )\n", cities[*i].stroke, gcodeState->currColor);
+#endif
+      for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
+        if(colorInPen(penList[p], cities[*i].stroke, penColorCount[p])){ //If tool p contains the new city's color,
+          gcodeState->targetTool = p; //Set the target tool to tool p.
           break;
         }
         gcodeState->targetTool = 0;
@@ -736,7 +739,8 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
     }
     if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange is neccesary.
 #ifdef DEBUG_OUTPUT
-  fprintf(gcode, "( Beginning Toolchange process. )\n");
+  fprintf(gcode, "    ( Beginning Toolchange )\n");
+  fprintf(gcode, "    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
 #endif
       if(machineType == 0){ //Actual tool change code per machine type. LFP and MVP will want to have Pause command for fluidncc
         if(gcodeState->currTool >= 0){
@@ -750,9 +754,10 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
           gcodeState->currTool = gcodeState->targetTool;
+          gcodeState->currColor = gcodeState->targetColor;
         }
-        if(gcodeState->currTool == -1){
-          gcodeState->currColor = penList[gcodeState->targetTool].colors[0];
+        if(gcodeState->currTool == -1){ //this curr color logic is wrong
+          gcodeState->currColor = gcodeState->targetColor;
           fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
           fprintf(gcode, "G0 X0\n");
@@ -765,6 +770,9 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
       gcodeState->currTool = gcodeState->targetTool;
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "    ( Ending Toolchange )\n");
+#endif
     }
   }
 }
@@ -792,13 +800,13 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   }
   fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
 #ifdef DEBUG_OUTPUT
-  fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
+  //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
 #endif
 }
 
 void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
 #ifdef DEBUG_OUTPUT
-  fprintf(gcode, "( Machine Type: %i )\n", machineType);
+  //fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
@@ -843,7 +851,6 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
 
     if((*sp == 0 && *ptIndex == 0) || (*sp == 1 && *ptIndex == *pathPointIndex -2)){ //first point written in path
-      gcodeState->cityStart = 0;
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
@@ -916,36 +923,33 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     char isClosed = toolPaths[j].closed;
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
+    //fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
 #endif
-    //Set city start
-    gcodeState->cityStart = 1;
-
     // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
     //We want to either iterate from the front or back of the array, depending on which point is closer.
 
     //checking for correct first and last point selection.
 #ifdef DEBUG_OUTPUT
-    float rx1, rx2, ry1, ry2;
-    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
-    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
-    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
-    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
-    if(settings->svgRotation > 0){
-        rx1 = rotateX(settings, x1, y1);
-        ry1 = rotateY(settings, x1, y1);
-        rx2 = rotateX(settings, x2, y2);
-        ry2 = rotateY(settings, x2, y2);
-    } else {
-        rx1 = x1;
-        rx2 = x2;
-        ry1 = y1;
-        ry2 = y2;
-    }
-    ry1 = -ry1;
-    ry2 = -ry2;
+    // float rx1, rx2, ry1, ry2;
+    // float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    // float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    // float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    // float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+    // if(settings->svgRotation > 0){
+    //     rx1 = rotateX(settings, x1, y1);
+    //     ry1 = rotateY(settings, x1, y1);
+    //     rx2 = rotateX(settings, x2, y2);
+    //     ry2 = rotateY(settings, x2, y2);
+    // } else {
+    //     rx1 = x1;
+    //     rx2 = x2;
+    //     ry1 = y1;
+    //     ry2 = y2;
+    // }
+    // ry1 = -ry1;
+    // ry2 = -ry2;
 
-    fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
+    // fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
 #endif
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     if(sp){
@@ -958,7 +962,6 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       }
     }
 
-    //Pick tool up to traversal height.
     toolUp(gcode, gcodeState, machineTypePtr);
 }
 
