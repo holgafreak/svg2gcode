@@ -48,15 +48,11 @@
 //#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
+#define MAXINT(a,b) (((a)>(b))?(a):(b))
+
 
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
-#define GHEADER "G90\nG0 M3 S%d\n" //G92 X0 Y0\n //add here your specific G-codes
-#define GHEADER_NEW "nG90\n" //G92 X0 Y0\n //add here your specific G-codes
-#define CUTTERON "G0 M3 S%d\n"
-#define CUTTEROFF "M5\n" // same for this
-#define GFOOTER "M5\nM30\n "
-#define GMODE "M4\n"
 
 static int sixColorWidth = 306;
 
@@ -76,7 +72,7 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
-  int *colors;
+  unsigned int *colors;
   int count;
   int slot;
 } Pen;
@@ -89,8 +85,62 @@ typedef struct {
 
 typedef struct {
   int id;
-  NSVGpaint stroke;
+  int numToolpaths;
+  unsigned int stroke;
 } City;
+
+typedef struct TransformSettings {
+    float scale;
+    float drawingWidth;
+    float drawingHeight;
+    float drawSpaceWidth;
+    float drawSpaceHeight;
+    float shiftX;
+    float shiftY;
+    float centerX;
+    float centerY;
+    float originalCenterX;
+    float originalCenterY;
+    float cosRot;
+    float sinRot;
+    float xmargin;
+    float ymargin;
+    int fitToMaterial;
+    int centerOnMaterial;
+    int swapDim;
+    int svgRotation;
+} TransformSettings;
+
+typedef struct GCodeState {
+    int npaths;
+    int quality;
+    int feed;
+    int feedY;
+    int zFeed;
+    int tempFeed;
+    int slowTravel;
+    int cityStart;
+    float zFloor;
+    float ztraverse;
+    char xy;
+    unsigned int currColor;
+    unsigned int targetColor;
+    int targetTool;
+    int currTool;
+    int colorMatch;
+    float toolChangePos;
+    float tol;
+    int numReord;
+    int maxPaths;
+    float x;
+    float y;
+    float firstx;
+    float firsty;
+    double totalDist;
+    float xold;
+    float yold;
+    float * pathPoints;
+} GCodeState;
 
 SVGPoint bezPoints[maxBez];
 static SVGPoint first,last;
@@ -240,32 +290,20 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* cities, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, City* cities, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
-  SVGPoint* pts;
   bezCount = 0;
   i = 0;
   k = 0;
   j = 0;
   p = 0;
   int shapeCount = 0;
-
-#ifdef DEBUG_OUTPUT
-  fprintf(debug, "Debug Information:\n");
-#endif
-
   for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
-#ifdef DEBUG_OUTPUT
-    fprintf(debug, "Shape num :%d\n", shapeCount);
-#endif
     for (path = shape->paths; path != NULL; path = path->next) {
       cities[i].id = i;
-      cities[i].stroke = shape->stroke;
-#ifdef DEBUG_OUTPUT
-      fprintf(debug, "  City number %d, Npts:%d ,color = %d\n", i, path->npts, shape->stroke.color);
-#endif
+      cities[i].stroke = shape->stroke.color;
       for (j = 0; j < path->npts - 1; j += 3) {
         float* pp = &path->pts[j * 2];
         if (j == 0) {
@@ -278,27 +316,26 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, int* npaths, City* citi
         }
         paths[k].closed = path->closed;
         paths[k].city = i;
+        cities[i].numToolpaths++;
         k++;
       }
       cont:
       if (k > pointsCount) {
         printf("Error: k > pointsCount\n");
-        *npaths = 0;
+        state->npaths = 0;
         return;
       }
       if (i > pathCount) {
         printf("Error: i > pathCount\n");
         exit(-1);
       }
+      state->maxPaths = MAXINT(cities[i].numToolpaths, state->maxPaths);
       i++;
     }
     j++;
     shapeCount++;
   }
-#ifdef DEBUG_OUTPUT
-  fprintf(debug, "Total paths: %d, total points: %d\n", i, k);
-#endif
-  *npaths = k;
+  state->npaths = k;
 }
 
 
@@ -321,7 +358,7 @@ void merge(City * arr, int left, int mid, int right) {
 
     int i = 0, j = 0, k = left;
     while (i < n1 && j < n2) {
-        if (leftArr[i].stroke.color <= rightArr[j].stroke.color) {
+        if (leftArr[i].stroke <= rightArr[j].stroke) {
             arr[k] = leftArr[i];
             i++;
         } else {
@@ -361,7 +398,7 @@ void mergeSort(City * arr, int left, int right, int level, int* mergeLevel) {
   }
 }
 
-int colorInPen(Pen pen, int color, int colorCount){
+int colorInPen(Pen pen, unsigned int color, int colorCount){
   for(int i = 0; i < colorCount; i++){
     if(pen.colors[i] == color){
       return 1;
@@ -398,7 +435,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
     }
     //add to penList[n] here based on color.
     for(int c = 0; c < numTools; c++){
-        if(colorInPen(penList[c], shape->stroke.color, penColorCount[c])){ //need an inPenColors here. Take a pen and a color int and count of colors to pen. 1 if color in pen.
+        if(colorInPen(penList[c], shape->stroke.color, penColorCount[c])){
           penList[c].count++;
           colorMatch =1;
           continue;
@@ -413,13 +450,6 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   }
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
-}
-
-//sort array by color defined int.
-int colorComp(const City * a, const City * b) {
-  const City *A = a, *B = b;
-  int x = A->stroke.color, y = B->stroke.color;
-  return (x > y) - (x < y);
 }
 
 
@@ -493,28 +523,6 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
   numCompOut = numComp;
 }
 
-typedef struct TransformSettings {
-    float scale;
-    float drawingWidth;
-    float drawingHeight;
-    float drawSpaceWidth;
-    float drawSpaceHeight;
-    float shiftX;
-    float shiftY;
-    float centerX;
-    float centerY;
-    float originalCenterX;
-    float originalCenterY;
-    float cosRot;
-    float sinRot;
-    float xmargin;
-    float ymargin;
-    int fitToMaterial;
-    int centerOnMaterial;
-    int swapDim;
-    int svgRotation;
-} TransformSettings;
-
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
   float width = g_image->width;
@@ -532,10 +540,10 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // Swap width and height if necessary
   if (settings.swapDim) {
-      float temp = width;
-      width = height;
-      height = temp;
-      printf("Swapped image width:%f Image Height:%f\n", width, height);
+    float temp = width;
+    width = height;
+    height = temp;
+    printf("Swapped image width:%f Image Height:%f\n", width, height);
   }
   settings.drawingWidth = width;
   settings.drawingHeight = height;
@@ -547,15 +555,15 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (settings.fitToMaterial) {
-      float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-      float svgRatio = width / height;
-      settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
-      printf("Scale%f\n", settings.scale);
-      settings.drawingWidth = width * settings.scale;
-      settings.drawingHeight = height * settings.scale;
-      printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-      settings.shiftX = settings.xmargin;
-      settings.shiftY = settings.ymargin;
+    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+    float svgRatio = width / height;
+    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
+    printf("Scale%f\n", settings.scale);
+    settings.drawingWidth = width * settings.scale;
+    settings.drawingHeight = height * settings.scale;
+    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
+    settings.shiftX = settings.xmargin;
+    settings.shiftY = settings.ymargin;
   }
 
   settings.centerOnMaterial = generationConfig[1];
@@ -565,11 +573,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
       settings.shiftX = settings.xmargin + ((settings.drawSpaceWidth - settings.drawingWidth) / 2);
       settings.shiftY = settings.ymargin + ((settings.drawSpaceHeight - settings.drawingHeight) / 2);
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
-  }
-
-  // Adjust for certain machine types
-  if (generationConfig[3] == 0) {
-      settings.shiftX += sixColorWidth - paperDimensions[0];
   }
 
   // Calculate center of scaled and rotated drawing. 
@@ -593,7 +596,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 }
 
 void printTransformSettings(TransformSettings settings) {
-  printf("scale: %f\n", settings.scale);
+  printf("\n\nscale: %f\n", settings.scale);
   printf("drawingWidth: %f\n", settings.drawingWidth);
   printf("drawingHeight: %f\n", settings.drawingHeight);
   printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
@@ -611,7 +614,7 @@ void printTransformSettings(TransformSettings settings) {
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
-  printf("svgRotation: %d\n", settings.svgRotation);
+  printf("svgRotation: %d\n\n", settings.svgRotation);
 }
 
 float rotateX(TransformSettings* settings, float firstx, float firsty) {
@@ -620,8 +623,373 @@ float rotateX(TransformSettings* settings, float firstx, float firsty) {
 }
 
 float rotateY(TransformSettings* settings, float firstx, float firsty) {
-    float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
-    return rotatedY;
+  float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
+  return rotatedY;
+}
+
+//want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
+//machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
+//create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
+
+void printGCodeState(GCodeState* state) {
+  printf("\n");  // Start with newline
+  printf("npaths: %d\n", state->npaths);
+  printf("quality: %d\n", state->quality);
+  printf("feed: %d\n", state->feed);
+  printf("feedY: %d\n", state->feedY);
+  printf("zFeed: %d\n", state->zFeed);
+  printf("tempFeed: %d\n", state->tempFeed);
+  printf("slowTravel: %d\n", state->slowTravel);
+  printf("cityStart: %d\n", state->cityStart);
+  printf("zFloor: %f\n", state->zFloor);
+  printf("ztraverse: %f\n", state->ztraverse);
+  printf("xy: %c\n", state->xy);
+  printf("currColor: %d\n", state->currColor);
+  printf("targetColor: %d\n", state->targetColor);
+  printf("targetTool: %d\n", state->targetTool);
+  printf("currTool: %d\n", state->currTool);
+  printf("colorMatch: %d\n", state->colorMatch);
+  printf("toolChangePos: %f\n", state->toolChangePos);
+  printf("tol: %f\n", state->tol);
+  printf("numReord: %d\n", state->numReord);
+  printf("x: %f\n", state->x);
+  printf("y: %f\n", state->y);
+  printf("firstx: %f\n", state->firstx);
+  printf("firsty: %f\n", state->firsty);
+  printf("totalDist: %lf\n", state->totalDist);
+  printf("xold: %f\n", state->xold);
+  printf("yold: %f\n", state->yold);
+  printf("\n");  // End with newline
+}
+
+GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
+  GCodeState state;
+  
+  state.quality = generationConfig[8];
+  state.feed= generationConfig[5]; 
+  state.feedY = generationConfig[6];
+  state.zFeed = generationConfig[7];
+  state.tempFeed = 0;
+  state.slowTravel = 3500;
+  state.cityStart = 1;
+  state.zFloor = paperDimensions[4];
+  state.ztraverse = paperDimensions[5];
+  state.xy = 1;
+  state.currColor = 0;
+  state.targetColor = 0;
+  state.targetTool = 0;
+  state.currTool = -1;
+  state.colorMatch = 0;
+  state.toolChangePos = -51.5;
+
+  if(state.quality == 2){
+    state.tol = 0.25;
+    state.numReord = 20;
+  } else if (state.quality == 1){
+    state.tol = 0.5;
+    state.numReord = 10;
+  } else {
+    state.tol = 1;
+    state.numReord = 10;
+  }
+
+  state.maxPaths = 0;
+  state.xold = 0;
+  state.yold = 0;
+
+  state.npaths = 0;
+  state.x = 0;
+  state.y = 0;
+  state.firstx = 0;
+  state.firsty = 0;
+  state.totalDist = 0;
+
+  return state;
+}
+
+void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%d F%f\n", gcodeState->zFloor, gcodeState->zFeed);
+}
+
+void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
+  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
+}
+
+void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
+  if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
+    gcodeState->targetColor = cities[*i].stroke;
+    if(colorInPen(penList[gcodeState->currTool], cities[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new city's color is assigned to current tool
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "( City stroke:%i currTool:%i )\n", cities[*i].stroke, gcodeState->currTool);
+#endif
+      for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
+        if(colorInPen(penList[p], cities[*i].stroke, penColorCount[p])){ //If tool p contains the new city's color,
+          gcodeState->targetTool = p; //Set the target tool to tool p.
+          break;
+        }
+        gcodeState->targetTool = 0;
+      }
+    }
+    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange is neccesary.
+#ifdef DEBUG_OUTPUT
+  fprintf(gcode, "    ( Beginning Toolchange )\n");
+  fprintf(gcode, "    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
+#endif
+      if(machineType == 0){ //Actual tool change code per machine type. LFP and MVP will want to have Pause command for fluidncc
+        if(gcodeState->currTool >= 0){
+          fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+          fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
+          gcodeState->currTool = gcodeState->targetTool;
+        }
+        if(gcodeState->currTool == -1){
+          fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
+          fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
+          fprintf(gcode, "G0 X0\n");
+          fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
+          fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
+        }
+      } else if (machineType == 2 && (gcodeState->targetTool != 0)){
+        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
+      }
+      toolUp(gcode, gcodeState, &machineType);
+      gcodeState->x = 0;
+      gcodeState->currColor = gcodeState->targetColor;
+      gcodeState->currTool = gcodeState->targetTool;
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "    ( Ending Toolchange )\n");
+#endif
+    }
+  }
+}
+
+
+void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
+  if (machineType == 0){ //Lift to zero for tool dropoff after job
+    fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
+  }
+  //drop off current tool
+  if(machineType == 0){ //6Color
+    fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60); //rotate to current color slot
+    fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
+    fprintf(gcode, "G1 X%f\n", gcodeState->toolChangePos); //slow move to dropoff
+    fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
+  }
+
+  gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
+  //send paper to front
+  fprintf(gcode, "G0 X0 Y0\n");
+  if(machineType == 0){
+    fprintf(gcode, "M5\nM30\n");
+  } else if(machineType == 1 || machineType == 2){
+    fprintf(gcode,"M5\nM2\n");
+  }
+  fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
+#ifdef DEBUG_OUTPUT
+  //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
+#endif
+}
+
+void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
+#ifdef DEBUG_OUTPUT
+  //fprintf(gcode, "( Machine Type: %i )\n", machineType);
+#endif
+  fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
+  fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
+
+  if(machineType == 0 || machineType == 2) { //6Color or MVP
+    fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
+  }
+}
+
+void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
+    float rotatedX, rotatedY, feedRate;
+    
+    // Get the unscaled and unrotated coordinates from pathPoints
+    float x = gcodeState->pathPoints[*ptIndex];
+    float y = gcodeState->pathPoints[(*ptIndex)+1];
+    
+    // Scale and shift the coordinates
+    float scaledX = x*settings->scale + settings->shiftX;
+    float scaledY = y*settings->scale + settings->shiftY;
+    
+    // Rotate the coordinates if needed
+    if(settings->svgRotation > 0){
+        rotatedX = rotateX(settings, scaledX, scaledY);
+        rotatedY = rotateY(settings, scaledX, scaledY);
+    } else {
+        rotatedX = scaledX;
+        rotatedY = scaledY;
+    }
+    rotatedY = -rotatedY;
+    
+    //Track current and previous position
+    gcodeState->xold = gcodeState->x;
+    gcodeState->yold = gcodeState->y;
+    gcodeState->x = rotatedX;
+    gcodeState->y = rotatedY;
+
+    if((gcodeState->xold != gcodeState->x) || (gcodeState->yold != gcodeState->x)){ //not duplicate point
+      feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
+      fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
+    }
+
+    if((*sp == 0 && *ptIndex == 0) || (*sp == 1 && *ptIndex == *pathPointIndex -2)){ //first point written in path
+      gcodeState->firstx = rotatedX;
+      gcodeState->firsty = rotatedY;
+      toolDown(gcode, gcodeState, machineType);
+    } else { //not first point in a path.
+      gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
+    }
+}
+
+int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
+    int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
+    float rx1, rx2, ry1, ry2;
+    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+
+    if(settings->svgRotation > 0) {
+        rx1 = rotateX(settings, x1, y1);
+        ry1 = rotateY(settings, x1, y1);
+        rx2 = rotateX(settings, x2, y2);
+        ry2 = rotateY(settings, x2, y2);
+    } else {
+        rx1 = x1;
+        ry1 = y1;
+        rx2 = x2;
+        ry2 = y2;
+    }
+    
+    ry1 = -ry1;
+    ry2 = -ry2;
+    
+    float distFromStart = distanceBetweenPoints(rx1, ry1, gcodeState->x, gcodeState->y);
+    float distFromEnd = distanceBetweenPoints(rx2, ry2, gcodeState->x, gcodeState->y);
+    if (distFromEnd < distFromStart){
+      res = 1;
+    }
+
+    return res;
+}
+
+//Now work on refactoring writeShape.
+void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
+    float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
+    int j, l; //local iterators with k <= j, l < npaths;
+    
+    gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
+    gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path.
+
+    int pathPointsIndex = 2;
+    for(j = *k; j < gcodeState->npaths; j++) {
+        int level;
+        if(toolPaths[j].city == cities[*i].id) {
+            bezCount = 0;
+            level = 0;
+            cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
+            for(l = 0; l < bezCount; l++) {
+              //unscaled and un-rotated bez points into pathPoints.
+              gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
+              gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
+#ifdef DEBUG_OUTPUT
+              //fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
+#endif
+              pathPointsIndex += 2; //pathPointsIndex-2 is x of endpoint
+            }
+
+            toolPaths[j].city = -1; // This path has been written
+        } else {
+            break;
+        }
+    }
+    char isClosed = toolPaths[j].closed;
+#ifdef DEBUG_OUTPUT
+    //fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
+#endif
+    // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
+    //We want to either iterate from the front or back of the array, depending on which point is closer.
+
+    //checking for correct first and last point selection.
+#ifdef DEBUG_OUTPUT
+    // float rx1, rx2, ry1, ry2;
+    // float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    // float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    // float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    // float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+    // if(settings->svgRotation > 0){
+    //     rx1 = rotateX(settings, x1, y1);
+    //     ry1 = rotateY(settings, x1, y1);
+    //     rx2 = rotateX(settings, x2, y2);
+    //     ry2 = rotateY(settings, x2, y2);
+    // } else {
+    //     rx1 = x1;
+    //     rx2 = x2;
+    //     ry1 = y1;
+    //     ry2 = y2;
+    // }
+    // ry1 = -ry1;
+    // ry2 = -ry2;
+
+    // fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
+#endif
+    int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
+    if(sp){
+      for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
+        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+      }
+    } else {
+      for(int z = 0; z < pathPointsIndex; z += 2){
+        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+      }
+    }
+
+    toolUp(gcode, gcodeState, machineTypePtr);
+}
+
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
+    int i, j;
+
+    printf("argc:\n\t%d\n", argc);
+
+    printf("argv:\n");
+    for(i = 0; i < argc; i++) {
+        printf("\t%d: %s\n", i, argv[i]);
+    }
+
+    printf("penColors:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: ", i+1);
+        for(j = 0; j < penColorCount[i]; j++) {
+            printf("%d ", penColors[i][j]);
+        }
+        printf("\n");
+    }
+
+    printf("penColorCount:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: %d\n", i, penColorCount[i]);
+    }
+
+    printf("paperDimensions:\n");
+    for(i = 0; i < 6; i++) {
+        printf("\t%d: %.2f\n", i, paperDimensions[i]);
+    }
+
+    printf("generationConfig:\n");
+    for(i = 0; i < 9; i++) {
+        printf("\t%d: %d\n", i, generationConfig[i]);
+    }
 }
 
 
@@ -640,74 +1008,50 @@ void help() {
   printf("\t-Z z-engage (-1.0)\n");
   printf("\t-B do Bezier curve smoothing\n");
   printf("\t-h this help\n");
-  }
-
-//want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-//machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
-//create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
+}
 
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
   printf("In Generate GCode\n");
-  int i,j,k,l,first = 1;
-  struct NSVGshape *shape1,*shape2;
-  struct NSVGpath *path1,*path2;
+#ifdef DEBUG_OUTPUT
+  printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
+#endif
+  int i, j, k, l = 1;
   SVGPoint* points;
   ToolPath* toolPaths;
   City *cities; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  int npaths;
-  int quality = generationConfig[8]; //0, 1, 2, low, med, high.
+  GCodeState gcodeState = initialzeGCodeState(paperDimensions, generationConfig);
+  printGCodeState(&gcodeState);
 
-  int feed = generationConfig[5]; //need to add some logic on a per move basis on line slope to interp between x and y specific feedrates.
-  int feedY = generationConfig[6];
-  int zFeed = generationConfig[7];
-  int tempFeed = 0;
-  int slowTravel = 3500;
-  int cityStart=1;
-  float zFloor = paperDimensions[4];
-  float ztraverse = paperDimensions[5]; //paperDimensions[5]; CALLED PENLIFT IN OSETTINGS AND FRONTED CODE
-  char xy = 1;
   int machineType = generationConfig[3]; //machineType
-
-  int currColor = 1; //if currColor == 1, then no tool is currently being held.
-  int targetColor = 0;
-  int targetTool = 0; //start as 0 so no tool is matched
-  int currTool = -1; //-1 indicates no tool picked up
-  int colorMatch = 0;
-  float toolChangePos = -51.5;
-  float tol; //In mm. Tolerance of x mm.
-  int numReord; //Tol and numReord configured based on quality later in method.
-  float x,y,bx,by,bxold,byold,firstx,firsty;
-  double d;
-  float xold,yold = 0;
-
-  float maxx = -10000.,minx=10000.,maxy = -10000.,miny=10000.,zmax = -1000.,zmin = 1000;
   int ch;
  
   FILE *gcode;
   FILE *debug;
 
+  //CLI argument BS may want to remove.
   printf("Argc:%d\n", argc);
   if(argc < 3) {
     help();
     return -1;
   }
-  while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) {
+  while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) { //I think handoff between argc and argv is happening here so can't remove for sake of opening and outputting to a file.
     switch(ch) {
     case 'h': help();
       break;
-    case 'f': feed = atoi(optarg);
+    case 'f': gcodeState.feed = atoi(optarg);
       break;
-    case 'n': numReord = atoi(optarg);
+    case 'n': gcodeState.numReord = atoi(optarg);
       break;
-    case 't': tol = atof(optarg);
+    case 't': gcodeState.tol = atof(optarg);
       break;
     default: help();
       return(1);
       break;
     }
   }
+  //end cli parsing.
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
@@ -715,17 +1059,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
-  }
-
-  if(quality == 2){
-    tol = 0.25;
-    numReord = 20;
-  } else if (quality == 1){
-    tol = 0.5;
-    numReord = 10;
-  } else {
-    tol = 1;
-    numReord = 10;
   }
 
   //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
@@ -737,19 +1070,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     penList[i].colors = penColors[i]; //assign penList[i].colors to the pointer passed in from penColors (there are numtools poiners to assign.)
   }
 
+  //
   calcBounds(g_image, numTools, penList, penColorCount);
-  printf("Color counts:\n");
-  for(int c = 0; c<numTools;c++){
-    printf("\tp%d=%d\n",c,penList[c].count);
-  }
-
   //Settings and calculations for rotation + transformation.
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
   printTransformSettings(settings);
-  float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-  
+
 #ifdef _WIN32
-seedrand((float)time(0));
+  seedrand((float)time(0));
 #endif
 
  gcode=fopen(argv[optind+1],"w");
@@ -767,23 +1095,21 @@ seedrand((float)time(0));
   memset(points, 0, pathCount*sizeof(SVGPoint));
   memset(toolPaths, 0, pointsCount*sizeof(ToolPath));
   memset(cities, 0, pathCount*sizeof(City));
+  gcodeState.npaths = 0;
 
-  printf("Size of City: %lu, size of cities: %lu\n", sizeof(City), sizeof(City)*pathCount);
-  npaths = 0;
-#ifdef DEBUG_OUTPUT
-  debug = fopen("debug.txt", "w");
-  if(debug == NULL) {
-    printf("Failed to open debug file\n");
-    return -1;
+  calcPaths(points, toolPaths, &gcodeState, cities, debug);
+  //alloc a worst case array for storing calculated draw points
+  //malloc for (maxPathsinCity * maxNumberofPointsperBez * xandy * sizeofInt)
+  gcodeState.pathPoints = malloc(gcodeState.maxPaths * maxBez * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
+  if (gcodeState.pathPoints == NULL) {
+    printf("Memory allocation failed!\n");
+    exit(1);
   }
-#endif
-  calcPaths(points, toolPaths, &npaths, cities, debug);
-#ifdef DEBUG_OUTPUT
-  fclose(debug);
-#endif
+
+  //Sorting cities for path optimization
   printf("Reorder with numCities: %d\n",pathCount);
-  for(k=0;k<numReord;k++) {
-    reorder(points, pathCount, xy, cities, penList, quality);
+  for(k=0;k < gcodeState.numReord; k++) {
+    reorder(points, pathCount, gcodeState.xy, cities, penList, gcodeState.quality);
     printf("%d... ",k);
     fflush(stdout);
   }
@@ -792,228 +1118,47 @@ seedrand((float)time(0));
   //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting cities by color\n");
   int mergeCount = 0;
-  int* mergeLevel = &mergeCount; 
-  mergeSort(cities, 0, pathCount-1, 0, mergeLevel); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  mergeSort(cities, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  //End sorting.
 
-  double totalDist = 0;
+  //Break into writeHeader method.
+  writeHeader(&gcodeState, gcode, machineType, paperDimensions);
 
-  printf("\n");
-  if(first) {
-    fprintf(gcode,GHEADER, 90);
-    fprintf(gcode, "G0 Z%f\n", ztraverse);
-    if(machineType == 0 || machineType == 2) { //6Color or MVP
-      fprintf(gcode, "G0 Z0\n");
-      fprintf(gcode, "G1 Y0 F%i\n", feedY);
-      fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), feedY);
-      fprintf(gcode, "G1 Y0 F%i\n", feedY);
-    }
-    //fprintf(gcode,"G92X0Y0Z0\n");
-  }
-
-  k=0;
-  i=0;
-
-#ifdef DEBUG_OUTPUT
-  FILE * printOut;
-  printOut = fopen("writeDebug.txt", "w");
-  if(printOut == NULL){
-    printf("Failed to open printOut for debug\n");
-    return -1;
-  }
-  fprintf(printOut, "PathCount:%d ShapeCount:%d PointCount:%d\n ", pathCount, shapeCount, pointsCount);
-#endif
-
+  //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
-#ifdef DEBUG_OUTPUT
-    fprintf(printOut, "City %d at i:%d\n", cities[i].id, i);
-#endif
-    cityStart=1;
-    for(k=0;k<npaths;k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
-                            //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
+    gcodeState.cityStart=1;
+    for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
+                                          //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
       if(toolPaths[k].city == -1){ //means already written. Go back to start of above for loop and check next.
           continue;
-      } else if(toolPaths[k].city == cities[i].id) {
-#ifdef DEBUG_OUTPUT //print out toolpath info for chosen toolpath if debug.
-        fprintf(printOut, "   ToolPath: %d, City: %d\n", k, cities[i].id);
-        fprintf(printOut, "     Points:Cpx1:%f, Cpy1:%f, Cpx2:%f, Cpy2:%f, X1:%f, Y1:%f, X2:%f, Y2:%f\n", toolPaths[k].points[0], toolPaths[k].points[1], toolPaths[k].points[2], toolPaths[k].points[3], toolPaths[k].points[4], toolPaths[k].points[5], toolPaths[k].points[6], toolPaths[k].points[7]);
-#endif
+      } else if(toolPaths[k].city == cities[i].id) { //Condition found for writing a city.
         break;
       }
     }
-    if(k > npaths-1) {
+    if(k > gcodeState.npaths - 1) {
       printf("Continue hit\n");
       continue;
     }
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( City %d at i:%d. Color: %i )\n", cities[i].id, i, cities[i].stroke);
+#endif
+    //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
+    writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
 
-    //colorCheck and tracking for TOOLCHANGE
-    if(cityStart == 1 && (machineType == 0 || machineType == 2)){ //City start and 6Color. MVP as well, wilk have different conditional for which tool to change to.
-      targetColor = cities[i].stroke.color;
-      if(targetColor != currColor) { //Detect tool slot of new color
-        for(int p = 0; p < numTools; p++){
-          if(colorInPen(penList[p], targetColor, penColorCount[p])){
-            targetTool = p;
-            break;
-          }
-          targetTool = 0;// if none of the tools matched this will always set target tool to default tool.
-        }
-      }
-      if(targetTool != currTool){ //need to check if tool picked up previously or not
-        if(machineType == 0){ //Maybe can abstract toolchanges to a different writeToolchange() method.
-          if(currTool >= 0){ //tool is being held
-            fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to dropoff
-            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from dropoff
-            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target slot
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%i\n", toolChangePos, slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%i\n", slowTravel); //slow move away from pickup
-            //fprintf(gcode, "( Tool change finished )\n");
-            currTool = targetTool;
-          }
-          if(currTool == -1){ //no tool picked up
-            currColor = penList[targetTool].colors[0];
-            //fprintf(gcode,"( Tool change with no previous tool to tool %d )\n", targetTool+1);
-            fprintf(gcode, "G1 A%d\n", targetTool*60); //rotate to target
-            fprintf(gcode, "G1 Z%i F%i\n", 0, zFeed);
-            fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-            fprintf(gcode, "G1 X%f F%d\n", toolChangePos ,slowTravel); //slow move to pickup
-            fprintf(gcode, "G1 X0 F%d\n", slowTravel); //slow move away from pickup
-            //fprintf(gcode, "( Tool change finished )\n");
-          }
-        } else if (machineType == 2 && (targetTool != 0)){
-          fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", targetTool);
-          //fprintf(gcode, "M0\n");
-        }  
-        currTool = targetTool;
-      }
-    }
-    //TOOLCHANGE END
-
-    //WRITING MOVES FOR DRAWING
-    firstx = x = (toolPaths[k].points[0])*settings.scale+settings.shiftX;
-    firsty = y =  (toolPaths[k].points[1])*settings.scale+settings.shiftY;
-
-    if(settings.svgRotation > 0){
-      //Apply transformation to center, rotate, then shift to rotated center.
-      rotatedX = rotateX(&settings, firstx, firsty);
-      rotatedY = rotateY(&settings, firstx, firsty);
-      firstx = x = rotatedX;
-      firsty = y = rotatedY;
-    }
-
-    y = firsty = -firsty;
-    maxx = x;
-    minx = x;
-    maxy = y;
-    miny = y;
-
-    fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
-    fprintf(gcode,"( city %d, color %d )\n", cities[i].id, cities[i].stroke.color);
-    fprintf(gcode,"G0 X%.4f Y%.4f\n", x, y);
-    fprintf(gcode, "G1 Z%f F%d\n", zFloor, zFeed);
-
-    cityStart = 0;
-    xold, bxold = x;
-    yold, byold = y;
-    for(j=k;j<npaths;j++) {
-      first = 1;
-      int level;
-      if(toolPaths[j].city == cities[i].id) {
-        //everything is a bezIer curve WOOOO. Each ToolPath has 8 points, as specified by nanoSvg.
-        bezCount = 0;
-        level = 0;
-        collinear = 0;
-        cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], tol, level);
-
-        for(l = 0; l < bezCount; l++) {
-          if(bezPoints[l].x > bounds[2] || bezPoints[l].x < bounds[0] || isnan(bezPoints[l].x)) {
-            printf("bezPoints %f %f\n",bezPoints[l].x,bounds[0]);
-            continue;
-          }
-          if(bezPoints[l].y > bounds[3]) {
-            printf("bezPoints y %d\n",l);
-            continue;
-          }
-          bx = (bezPoints[l].x)*settings.scale+settings.shiftX;
-          by = (bezPoints[l].y)*settings.scale+settings.shiftY;
-
-          //ROTATION FOR bx and by
-          if(settings.svgRotation > 0){
-            //Apply transformation to center
-            rotatedBX = rotateX(&settings, bx, by);
-            rotatedBY = rotateY(&settings, bx, by);
-            bx = rotatedBX;
-            by = rotatedBY;
-          }
-
-          by = -by;
-          maxx = bx;
-          minx = bx;
-          maxy = by;
-          miny = by;
-
-          d = distanceBetweenPoints(bxold, byold, bx, by);
-          totalDist += d;
-
-          tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
-          //fprintf(gcode, "( Line DEBUG x1:%f y1:%f x2:%f y2:%f )\n", bxold, byold, bx, by);
-          fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n",bx,by, tempFeed);
-
-          bxold = bx;
-          byold = by;
-        } 
-        toolPaths[j].city = -1; // This path has been written
-      } else {
-        break;
-      }
-    }
-    if(toolPaths[j].closed) { //Line back to first point if path is closed.
-      tempFeed = interpFeedrate(feed, feedY, absoluteSlope(bxold, byold, bx, by));
-      fprintf(gcode,"G1 X%.4f Y%.4f  F%d\n", firstx, firsty, tempFeed);
-      bxold = firstx;
-      byold = firsty;
-      xold = firstx;
-      yold = firsty;
-      fprintf(gcode, "G1 Z%f F%d\n", ztraverse, zFeed);
-    }
-    //END WRITING MOVES FOR DRAWING SECTION
+    //WRITING MOVES FOR DRAWING 
+    writeShape(gcode, &gcodeState, &settings, cities, toolPaths, &machineType, &k, &i);
   }
-  if(machineType == 1 || machineType == 2){ //Lift to traverse height after job
-    fprintf(gcode, "G1 Z%f F%i\n", ztraverse, zFeed);
-  } else if (machineType == 0){ //Lift to zero for tool dropoff after job
-    fprintf(gcode, "G1 Z%f F%i\n", 0, zFeed);
-  }
-  //drop off current tool
-  if(machineType == 0){ //6Color
-    fprintf(gcode, "G1 A%d\n", currTool*60); //rotate to current color slot
-    fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
-    fprintf(gcode, "G1 X%f\n", toolChangePos); //slow move to dropoff
-    fprintf(gcode, "G1 X0\n"); //slow move away from dropoff
-  }
+  
+  writeFooter(&gcodeState, gcode, machineType);
 
-  totalDist = totalDist/1000; //conversion to meters
-  //send paper to front
-  fprintf(gcode, "G0 X0 Y0\n");
-  if(machineType == 0){
-    fprintf(gcode,GFOOTER);
-  } else if(machineType == 1 || machineType == 2){
-    fprintf(gcode,"M5\n M2\n");
-  }
-  fprintf(gcode, "( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
-  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", totalDist, numReord, numCompOut, pointCountOut, pathCountOut);
-  printf("( size X%.4f Y%.4f x X%.4f Y%.4f )\n",minx,miny,maxx,maxy);
+  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", gcodeState.totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
+  free(gcodeState.pathPoints);
   fclose(gcode);
   free(points);
   free(toolPaths);
   free(cities);
   free(penList);
   nsvgDelete(g_image);
-  //send a signal to qml that the gcode is done
-#ifdef DEBUG_OUTPUT
-  fclose(printOut);
-#endif
 
   return 0;
 }
