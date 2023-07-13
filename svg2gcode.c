@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
@@ -72,7 +72,7 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
-  int *colors;
+  unsigned int *colors;
   int count;
   int slot;
 } Pen;
@@ -86,7 +86,7 @@ typedef struct {
 typedef struct {
   int id;
   int numToolpaths;
-  int stroke;
+  unsigned int stroke;
 } City;
 
 typedef struct TransformSettings {
@@ -123,8 +123,8 @@ typedef struct GCodeState {
     float zFloor;
     float ztraverse;
     char xy;
-    int currColor;
-    int targetColor;
+    unsigned int currColor;
+    unsigned int targetColor;
     int targetTool;
     int currTool;
     int colorMatch;
@@ -398,7 +398,7 @@ void mergeSort(City * arr, int left, int right, int level, int* mergeLevel) {
   }
 }
 
-int colorInPen(Pen pen, int color, int colorCount){
+int colorInPen(Pen pen, unsigned int color, int colorCount){
   for(int i = 0; i < colorCount; i++){
     if(pen.colors[i] == color){
       return 1;
@@ -435,7 +435,7 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
     }
     //add to penList[n] here based on color.
     for(int c = 0; c < numTools; c++){
-        if(colorInPen(penList[c], shape->stroke.color, penColorCount[c])){ //need an inPenColors here. Take a pen and a color int and count of colors to pen. 1 if color in pen.
+        if(colorInPen(penList[c], shape->stroke.color, penColorCount[c])){
           penList[c].count++;
           colorMatch =1;
           continue;
@@ -450,13 +450,6 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   }
   printf("pathCount = %d\n", pathCount);
   printf("shapeCount = %d\n",shapeCount);
-}
-
-//sort array by color defined int.
-int colorComp(const City * a, const City * b) {
-  const City *A = a, *B = b;
-  int x = A->stroke, y = B->stroke;
-  return (x > y) - (x < y);
 }
 
 
@@ -725,9 +718,9 @@ void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = cities[*i].stroke;
-    if(cities[*i].stroke != gcodeState->currColor) { //Stroke of upcoming city is not the currently held tool's color.
+    if(colorInPen(penList[gcodeState->currTool], cities[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new city's color is assigned to current tool
 #ifdef DEBUG_OUTPUT
-      fprintf(gcode, "( City stroke:%i currColor:%i )\n", cities[*i].stroke, gcodeState->currColor);
+      fprintf(gcode, "( City stroke:%i currTool:%i )\n", cities[*i].stroke, gcodeState->currTool);
 #endif
       for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
         if(colorInPen(penList[p], cities[*i].stroke, penColorCount[p])){ //If tool p contains the new city's color,
@@ -754,10 +747,8 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%i\n", gcodeState->toolChangePos, gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%i\n", gcodeState->slowTravel);
           gcodeState->currTool = gcodeState->targetTool;
-          gcodeState->currColor = gcodeState->targetColor;
         }
-        if(gcodeState->currTool == -1){ //this curr color logic is wrong
-          gcodeState->currColor = gcodeState->targetColor;
+        if(gcodeState->currTool == -1){
           fprintf(gcode, "G1 A%d\n", gcodeState->targetTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
           fprintf(gcode, "G0 X0\n");
@@ -769,6 +760,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       }
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
+      gcodeState->currColor = gcodeState->targetColor;
       gcodeState->currTool = gcodeState->targetTool;
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
@@ -977,7 +969,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
 
     printf("penColors:\n");
     for(i = 0; i < 6; i++) {
-        printf("\t%d: ", i);
+        printf("\t%d: ", i+1);
         for(j = 0; j < penColorCount[i]; j++) {
             printf("%d ", penColors[i][j]);
         }
