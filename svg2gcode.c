@@ -914,35 +914,6 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
         }
     }
     char isClosed = toolPaths[j].closed;
-#ifdef DEBUG_OUTPUT
-    //fprintf(gcode, " ( PathPointsIndex = %i)\n", pathPointsIndex);
-#endif
-    // Iterate over the entire pathPoints array from start to pathPointsIndex. This should write the entire shape to the file.
-    //We want to either iterate from the front or back of the array, depending on which point is closer.
-
-    //checking for correct first and last point selection.
-#ifdef DEBUG_OUTPUT
-    // float rx1, rx2, ry1, ry2;
-    // float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
-    // float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
-    // float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
-    // float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
-    // if(settings->svgRotation > 0){
-    //     rx1 = rotateX(settings, x1, y1);
-    //     ry1 = rotateY(settings, x1, y1);
-    //     rx2 = rotateX(settings, x2, y2);
-    //     ry2 = rotateY(settings, x2, y2);
-    // } else {
-    //     rx1 = x1;
-    //     rx2 = x2;
-    //     ry1 = y1;
-    //     ry2 = y2;
-    // }
-    // ry1 = -ry1;
-    // ry2 = -ry2;
-
-    // fprintf(gcode, " ( X1:%f Y1:%f X2:%f Y2:%f )\n", rx1, ry1, rx2, ry2);
-#endif
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     if(sp){
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
