@@ -708,7 +708,7 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
 }
 
 void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G1 Z%d F%f\n", gcodeState->zFloor, gcodeState->zFeed);
+  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->zFloor, gcodeState->zFeed);
 }
 
 void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
