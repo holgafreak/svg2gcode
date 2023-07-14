@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
@@ -115,6 +115,7 @@ typedef struct GCodeState {
     int npaths;
     int quality;
     float precision;
+    int pointsCulled;
     int feed;
     int feedY;
     int zFeed;
@@ -637,6 +638,7 @@ void printGCodeState(GCodeState* state) {
   printf("npaths: %d\n", state->npaths);
   printf("quality: %d\n", state->quality);
   printf("feed: %d\n", state->feed);
+  printf("precision: %f\n", state->precision);
   printf("feedY: %d\n", state->feedY);
   printf("zFeed: %d\n", state->zFeed);
   printf("tempFeed: %d\n", state->tempFeed);
@@ -667,10 +669,11 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   GCodeState state;
   
   state.quality = generationConfig[8];
-  state.precision = generationConfig[9];
+  state.precision = paperDimensions[6];
   state.feed= generationConfig[5]; 
   state.feedY = generationConfig[6];
   state.zFeed = generationConfig[7];
+  state.pointsCulled = 0;
   state.tempFeed = 0;
   state.slowTravel = 3500;
   state.cityStart = 1;
@@ -792,7 +795,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   } else if(machineType == 1 || machineType == 2){
     fprintf(gcode,"M5\nM2\n");
   }
-  fprintf(gcode, "( Total distance traveled = %f m )\n", gcodeState->totalDist);
+  fprintf(gcode, "( Total distance traveled = %f m, PointsCulled: = %d)\n", gcodeState->totalDist, gcodeState->pointsCulled);
 #ifdef DEBUG_OUTPUT
   //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
 #endif
@@ -820,15 +823,20 @@ int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current
   return (*sp == 0 && *ptIndex == *pathPointIndex - 2) || (*sp == 1 && *ptIndex == 0);
 }
 
-int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py){ //always want to write if it is first or last point in a shape.
+int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode){ //always want to write if it is first or last point in a shape.
   //want a preliminary check that the coordinates are within bounds.
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xmargin) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->ymargin))){
+    gcodeState->pointsCulled++;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     return 1;
   } 
   //return 1 if the distance is greater than the precision value and if it is a new point.
-  return ((distanceBetweenPoints(gcodeState->xold, gcodeState->yold, *px, *py) >= gcodeState->precision) && ((gcodeState->xold != *px) || (gcodeState->yold != *py)));
+  if((distanceBetweenPoints(gcodeState->xold, gcodeState->yold, *px, *py) >= gcodeState->precision) && ((gcodeState->xold != *px) || (gcodeState->yold != *py))){ //can write
+    return 1;
+  }
+  gcodeState->pointsCulled++;
+  return 0;
 }
 
 void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
@@ -852,7 +860,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     rotatedY = -rotatedY;
 
-    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY)){ //Can write, if first or last in shape, or if dist is large enough.
+    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY, gcode)){ //Can write, if first or last in shape, or if dist is large enough.
       gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
       gcodeState->yold = gcodeState->y;
       gcodeState->x = rotatedX;
@@ -947,7 +955,7 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     toolUp(gcode, gcodeState, machineTypePtr);
 }
 
-void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
     int i, j;
 
     printf("argc:\n\t%d\n", argc);
@@ -1000,7 +1008,7 @@ void help() {
   printf("\t-h this help\n");
 }
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[10]) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1141,7 +1149,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   
   writeFooter(&gcodeState, gcode, machineType);
 
-  printf("( Total distance traveled = %f m, numReord = %i, numComp = %i, pointsCount = %i, pathCount = %i)\n", gcodeState.totalDist, gcodeState.numReord, numCompOut, pointCountOut, pathCountOut);
+  printf("( Total distance traveled = %f m, PointsCulled: = %d)\n", gcodeState.totalDist, gcodeState.pointsCulled);
   free(gcodeState.pathPoints);
   fclose(gcode);
   free(points);
