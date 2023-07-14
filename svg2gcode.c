@@ -114,6 +114,7 @@ typedef struct TransformSettings {
 typedef struct GCodeState {
     int npaths;
     int quality;
+    float precision;
     int feed;
     int feedY;
     int zFeed;
@@ -666,6 +667,7 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   GCodeState state;
   
   state.quality = generationConfig[8];
+  state.precision = generationConfig[9];
   state.feed= generationConfig[5]; 
   state.feedY = generationConfig[6];
   state.zFeed = generationConfig[7];
@@ -810,6 +812,25 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* pa
   }
 }
 
+int firstPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current point is first point in shape
+  return (*sp == 0 && *ptIndex == 0) || (*sp == 1 && *ptIndex == *pathPointIndex -2 );
+}
+
+int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current point is last point in shape
+  return (*sp == 0 && *ptIndex == *pathPointIndex - 2) || (*sp == 1 && *ptIndex == 0);
+}
+
+int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py){ //always want to write if it is first or last point in a shape.
+  //want a preliminary check that the coordinates are within bounds.
+  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xmargin) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->ymargin))){
+    return 0;
+  } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
+    return 1;
+  } 
+  //return 1 if the distance is greater than the precision value and if it is a new point.
+  return ((distanceBetweenPoints(gcodeState->xold, gcodeState->yold, *px, *py) >= gcodeState->precision) && ((gcodeState->xold != *px) || (gcodeState->yold != *py)));
+}
+
 void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
     float rotatedX, rotatedY, feedRate;
     
@@ -830,19 +851,17 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
         rotatedY = scaledY;
     }
     rotatedY = -rotatedY;
-    
-    //Track current and previous position
-    gcodeState->xold = gcodeState->x;
-    gcodeState->yold = gcodeState->y;
-    gcodeState->x = rotatedX;
-    gcodeState->y = rotatedY;
 
-    if((gcodeState->xold != gcodeState->x) || (gcodeState->yold != gcodeState->x)){ //not duplicate point
+    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY)){ //Can write, if first or last in shape, or if dist is large enough.
+      gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
+      gcodeState->yold = gcodeState->y;
+      gcodeState->x = rotatedX;
+      gcodeState->y = rotatedY;
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
     }
 
-    if((*sp == 0 && *ptIndex == 0) || (*sp == 1 && *ptIndex == *pathPointIndex -2)){ //first point written in path
+    if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
@@ -981,7 +1000,7 @@ void help() {
   printf("\t-h this help\n");
 }
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[9]) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[6], int generationConfig[10]) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
