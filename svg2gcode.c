@@ -721,7 +721,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.tempy = 0;
   state.trackedDist = 0;
   state.totalDist = 0;
-  state.brushDist = 100; //for testing right now
+  state.brushDist = 1000; //for testing right now
   state.countIntermediary = 0;
 
   return state;
@@ -922,7 +922,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       }
       
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
-      fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
+      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
     }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
