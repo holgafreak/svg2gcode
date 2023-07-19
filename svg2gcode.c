@@ -141,9 +141,9 @@ typedef struct GCodeState {
     float firsty;
     float tempx;
     float tempy;
-    float trackedDist;
+    float trackedDist; //dist since last pen change or brush refill
     double totalDist;
-    float brushDist;
+    float brushDist; //dist in a pen or brush (configurable)
     float xold;
     float yold;
     float * pathPoints;
@@ -673,7 +673,7 @@ void printGCodeState(GCodeState* state) {
   printf("\n");  // End with newline
 }
 
-GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
+GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig){
   GCodeState state;
   
   state.quality = generationConfig[8];
@@ -716,7 +716,11 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.y = 0;
   state.firstx = 0;
   state.firsty = 0;
+  state.tempx = 0;
+  state.tempy = 0;
+  state.trackedDist = 0;
   state.totalDist = 0;
+  state.brushDist = 1000; //1000 mm for testing right now. Change every meter.
 
   return state;
 }
@@ -848,8 +852,13 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   return 0;
 }
 
+int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcodeState, int * dist){
+  return (!firstPoint(sp, ptIndex, pathPointIndex)) && (gcodeState->trackedDist + *dist > gcodeState->brushDist);
+}
+
 void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
     float rotatedX, rotatedY, feedRate;
+    float dist = 0.0;
     
     // Get the unscaled and unrotated coordinates from pathPoints
     float x = gcodeState->pathPoints[*ptIndex];
@@ -874,8 +883,36 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->yold = gcodeState->y;
       gcodeState->x = rotatedX;
       gcodeState->y = rotatedY;
-      //want to implement a break here, that checks if this move will overflow the specified paintDist, and interrupt with an inbetween point.
-      //Tracked dist will track distance in Brush Mode, and will only be reset on paint pickup, which will be called at said distance.
+      dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, rotatedX, rotatedY);
+      
+      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point BS
+        gcodeState->trackedDist += dist;
+        if(gcodeState->trackedDist >= gcodeState->brushDist){ 
+          int numIntermediary = gcodeState->trackedDist/gcodeState->brushDist; //Cast to int rounds down to floor.
+          float dirX, dirY, px, py, mag = 0; //variables for calculating intermediary points.
+          float distToPoint;
+          for(int i = 0; i < numIntermediary; i++){
+            if(i == 0){
+              distToPoint = gcodeState->trackedDist-gcodeState->brushDist;
+            } else {
+              distToPoint = gcodeState->brushDist;
+            }
+            dirX = rotatedX - gcodeState->xold;
+            dirY = rotatedY - gcodeState->yold;
+            mag = sqrt(dirX*dirX + dirY*dirY);
+            dirX = dirX / mag;
+            dirY = dirY / mag;
+            px = gcodeState->xold + (distToPoint * dirX);
+            py =  gcodeState->yold + (distToPoint * dirY);
+            gcodeState->tempx = px;
+            gcodeState->tempy = py;
+            //write out to point.
+            fprintf(gcode, "( Intermediary point X:%.4f Y:%.4f)\n", px, py);
+          }
+          //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
+          gcodeState->trackedDist = distanceBetweenPoints(gcodeState->tempx, gcodeState->tempy, rotatedX, rotatedY);
+        }
+      }
       
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
@@ -886,7 +923,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
     } else { //not first point in a path.
-      gcodeState->totalDist += distanceBetweenPoints(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y);
+      gcodeState->totalDist += dist; //Add dist from sp to endpoint calculated regardless of intermediary points.
     }
 }
 
@@ -1037,7 +1074,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   City *cities; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  GCodeState gcodeState = initialzeGCodeState(paperDimensions, generationConfig);
+  GCodeState gcodeState = initializeGCodeState(paperDimensions, generationConfig);
   printGCodeState(&gcodeState);
 
   int machineType = generationConfig[3]; //machineType
