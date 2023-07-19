@@ -721,7 +721,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.tempy = 0;
   state.trackedDist = 0;
   state.totalDist = 0;
-  state.brushDist = 1000; //for testing right now
+  state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km
   state.countIntermediary = 0;
 
   return state;
@@ -922,7 +922,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 
         gcodeState->totalDist += dist;
       }
-      
+
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
     }
