@@ -144,6 +144,7 @@ typedef struct GCodeState {
     float trackedDist; //dist since last pen change or brush refill
     double totalDist;
     float brushDist; //dist in a pen or brush (configurable)
+    int countIntermediary;
     float xold;
     float yold;
     float * pathPoints;
@@ -720,7 +721,8 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.tempy = 0;
   state.trackedDist = 0;
   state.totalDist = 0;
-  state.brushDist = 1000; //1000 mm for testing right now. Change every meter.
+  state.brushDist = 100; //for testing right now
+  state.countIntermediary = 0;
 
   return state;
 }
@@ -808,7 +810,9 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   } else if(machineType == 1 || machineType == 2){
     fprintf(gcode,"M5\nM2\n");
   }
-  fprintf(gcode, "( Total distance traveled = %f m, PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->totalDist, gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
+  fprintf(gcode, "( Total distance traveled = %f m)\n", gcodeState->totalDist);
+  fprintf(gcode, "( Intermediary Points: %d )\n", gcodeState->countIntermediary);
+  fprintf(gcode, "( PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
 #ifdef DEBUG_OUTPUT
   //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
 #endif
@@ -884,11 +888,13 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->x = rotatedX;
       gcodeState->y = rotatedY;
       dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, rotatedX, rotatedY);
-      
+
       if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point BS
         gcodeState->trackedDist += dist;
         if(gcodeState->trackedDist >= gcodeState->brushDist){ 
-          int numIntermediary = gcodeState->trackedDist/gcodeState->brushDist; //Cast to int rounds down to floor.
+          gcodeState->tempx = gcodeState->xold;
+          gcodeState->tempy = gcodeState->yold;
+          int numIntermediary = (int)(gcodeState->trackedDist/gcodeState->brushDist); //Cast to int rounds down to floor.
           float dirX, dirY, px, py, mag = 0; //variables for calculating intermediary points.
           float distToPoint;
           for(int i = 0; i < numIntermediary; i++){
@@ -897,18 +903,19 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
             } else {
               distToPoint = gcodeState->brushDist;
             }
-            dirX = rotatedX - gcodeState->xold;
-            dirY = rotatedY - gcodeState->yold;
+            dirX = rotatedX - gcodeState->tempx;
+            dirY - rotatedY - gcodeState->tempy;
             mag = sqrt(dirX*dirX + dirY*dirY);
             dirX = dirX / mag;
             dirY = dirY / mag;
-            px = gcodeState->xold + (distToPoint * dirX);
-            py =  gcodeState->yold + (distToPoint * dirY);
+            px = gcodeState->tempx + (distToPoint * dirX);
+            py =  gcodeState->tempy + (distToPoint * dirY);
             gcodeState->tempx = px;
             gcodeState->tempy = py;
             //write out to point.
             fprintf(gcode, "( Intermediary point X:%.4f Y:%.4f)\n", px, py);
           }
+          gcodeState->countIntermediary += numIntermediary;
           //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
           gcodeState->trackedDist = distanceBetweenPoints(gcodeState->tempx, gcodeState->tempy, rotatedX, rotatedY);
         }
