@@ -889,7 +889,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->y = rotatedY;
       dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, rotatedX, rotatedY);
 
-      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point BS
+      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point
         gcodeState->trackedDist += dist;
         if(gcodeState->trackedDist >= gcodeState->brushDist){ 
           gcodeState->tempx = gcodeState->xold;
@@ -919,6 +919,8 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
           //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
           gcodeState->trackedDist = distanceBetweenPoints(gcodeState->tempx, gcodeState->tempy, rotatedX, rotatedY);
         }
+
+        gcodeState->totalDist += dist;
       }
       
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
@@ -929,8 +931,6 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
-    } else { //not first point in a path.
-      gcodeState->totalDist += dist; //Add dist from sp to endpoint calculated regardless of intermediary points.
     }
 }
 
