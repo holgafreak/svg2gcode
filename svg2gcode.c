@@ -115,7 +115,8 @@ typedef struct GCodeState {
     int npaths;
     int quality;
     float precision;
-    int pointsCulled;
+    int pointsCulledPrec;
+    int pointsCulledBounds;
     int feed;
     int feedY;
     int zFeed;
@@ -138,7 +139,11 @@ typedef struct GCodeState {
     float y;
     float firstx;
     float firsty;
+    float tempx;
+    float tempy;
+    float trackedDist;
     double totalDist;
+    float brushDist;
     float xold;
     float yold;
     float * pathPoints;
@@ -552,6 +557,9 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("DrawingWidth:%f, DrawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
   fflush(stdout);
 
+#ifdef DEBUG_OUTPUT
+  printf("Fit To Mat from Config = %i\n", generationConfig[0]);
+#endif
   // Determine if fitting to material is necessary
   settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceHeight) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
 
@@ -673,7 +681,8 @@ GCodeState initialzeGCodeState(float * paperDimensions, int * generationConfig){
   state.feed= generationConfig[5]; 
   state.feedY = generationConfig[6];
   state.zFeed = generationConfig[7];
-  state.pointsCulled = 0;
+  state.pointsCulledPrec = 0;
+  state.pointsCulledBounds = 0;
   state.tempFeed = 0;
   state.slowTravel = 3500;
   state.cityStart = 1;
@@ -795,7 +804,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   } else if(machineType == 1 || machineType == 2){
     fprintf(gcode,"M5\nM2\n");
   }
-  fprintf(gcode, "( Total distance traveled = %f m, PointsCulled: = %d)\n", gcodeState->totalDist, gcodeState->pointsCulled);
+  fprintf(gcode, "( Total distance traveled = %f m, PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->totalDist, gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
 #ifdef DEBUG_OUTPUT
   //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
 #endif
@@ -826,7 +835,7 @@ int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current
 int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode){ //always want to write if it is first or last point in a shape.
   //want a preliminary check that the coordinates are within bounds.
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xmargin) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->ymargin))){
-    gcodeState->pointsCulled++;
+    gcodeState->pointsCulledBounds++;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     return 1;
@@ -835,7 +844,7 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   if((distanceBetweenPoints(gcodeState->xold, gcodeState->yold, *px, *py) >= gcodeState->precision) && ((gcodeState->xold != *px) || (gcodeState->yold != *py))){ //can write
     return 1;
   }
-  gcodeState->pointsCulled++;
+  gcodeState->pointsCulledPrec++;
   return 0;
 }
 
@@ -865,6 +874,9 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->yold = gcodeState->y;
       gcodeState->x = rotatedX;
       gcodeState->y = rotatedY;
+      //want to implement a break here, that checks if this move will overflow the specified paintDist, and interrupt with an inbetween point.
+      //Tracked dist will track distance in Brush Mode, and will only be reset on paint pickup, which will be called at said distance.
+      
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
       fprintf(gcode,"G1 X%.4f Y%.4f F%f\n", gcodeState->x, gcodeState->y, feedRate);
     }
@@ -913,6 +925,7 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
 //Now work on refactoring writeShape.
 void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
+    int writeShape = 1;
     int j, l; //local iterators with k <= j, l < npaths;
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
@@ -922,8 +935,14 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     for(j = *k; j < gcodeState->npaths; j++) {
         int level;
         if(toolPaths[j].city == cities[*i].id) {
+#ifdef DEBUG_OUTPUT
+            // fprintf(gcode, "( Toolpath %d for city %d )\n", j, toolPaths[j].city);
+            // fprintf(gcode, "( Points: P1[%f, %f] P2[%f, %f] )\n", toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[6], toolPaths[j].points[7]);
+            //fprintf(gcode, "( Is path closed? %s )\n", toolPaths[j].closed ? "Yes" : "No");
+#endif
             bezCount = 0;
             level = 0;
+            
             cubicBez(toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[2], toolPaths[j].points[3], toolPaths[j].points[4], toolPaths[j].points[5], toolPaths[j].points[6], toolPaths[j].points[7], gcodeState->tol, level);
             for(l = 0; l < bezCount; l++) {
               //unscaled and un-rotated bez points into pathPoints.
@@ -990,7 +1009,6 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 }
 
-
 void help() {
   printf("usage: svg2gcode [options] svg-file gcode-file\n");
   printf("options:\n");
@@ -1053,7 +1071,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind],"px",96);
+  g_image = nsvgParseFromFile(argv[optind],"px", 128);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
@@ -1149,7 +1167,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   
   writeFooter(&gcodeState, gcode, machineType);
 
-  printf("( Total distance traveled = %f m, PointsCulled: = %d)\n", gcodeState.totalDist, gcodeState.pointsCulled);
+  printf("( Total distance traveled = %f m, PointsCulledPrec: = %d)\n", gcodeState.totalDist, gcodeState.pointsCulledPrec);
   free(gcodeState.pathPoints);
   fclose(gcode);
   free(points);
