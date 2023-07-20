@@ -792,7 +792,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
   if (machineType == 0){ //Lift to zero for tool dropoff after job
-    fprintf(gcode, "G1 Z%f F%i\n", 0, gcodeState->zFeed);
+    fprintf(gcode, "G1 Z%.1f F%i\n", 0.0, gcodeState->zFeed);
   }
   //drop off current tool
   if(machineType == 0){ //6Color
@@ -904,7 +904,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
               distToPoint = gcodeState->brushDist;
             }
             dirX = rotatedX - gcodeState->tempx;
-            dirY - rotatedY - gcodeState->tempy;
+            dirY = rotatedY - gcodeState->tempy;
             mag = sqrt(dirX*dirX + dirY*dirY);
             dirX = dirX / mag;
             dirY = dirY / mag;
