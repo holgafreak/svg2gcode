@@ -972,18 +972,13 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     int writeShape = 1;
     int j, l; //local iterators with k <= j, l < npaths;
     
-    gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated. Going to create a writePoint method that handles that.
-    gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path.
+    gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
+    gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path. (x, y)
 
     int pathPointsIndex = 2;
     for(j = *k; j < gcodeState->npaths; j++) {
         int level;
         if(toolPaths[j].city == cities[*i].id) {
-#ifdef DEBUG_OUTPUT
-            // fprintf(gcode, "( Toolpath %d for city %d )\n", j, toolPaths[j].city);
-            // fprintf(gcode, "( Points: P1[%f, %f] P2[%f, %f] )\n", toolPaths[j].points[0], toolPaths[j].points[1], toolPaths[j].points[6], toolPaths[j].points[7]);
-            //fprintf(gcode, "( Is path closed? %s )\n", toolPaths[j].closed ? "Yes" : "No");
-#endif
             bezCount = 0;
             level = 0;
             
@@ -992,9 +987,6 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
               //unscaled and un-rotated bez points into pathPoints.
               gcodeState->pathPoints[pathPointsIndex] = bezPoints[l].x;
               gcodeState->pathPoints[pathPointsIndex + 1] = bezPoints[l].y;
-#ifdef DEBUG_OUTPUT
-              //fprintf(gcode, "  ( To pathPoints. X:%f, Y:%f ) \n", gcodeState->pathPoints[pathPointsIndex], gcodeState->pathPoints[pathPointsIndex+1]);
-#endif
               pathPointsIndex += 2; //pathPointsIndex-2 is x of endpoint
             }
 
