@@ -680,7 +680,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.quality = generationConfig[8];
   state.precision = paperDimensions[6];
   state.feed= generationConfig[5]; 
-  state.feedY = generationConfig[6];
+  state.feedY = generationConfig[5]; //Set x and y to same FR for now.
   state.zFeed = generationConfig[7];
   state.pointsCulledPrec = 0;
   state.pointsCulledBounds = 0;
@@ -721,7 +721,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.tempy = 0;
   state.trackedDist = 0;
   state.totalDist = 0;
-  state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km
+  state.brushDist = 1000; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
   state.countIntermediary = 0;
 
   return state;
