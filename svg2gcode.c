@@ -79,7 +79,7 @@ typedef struct {
 
 typedef struct {
   float points[8];
-  int city;
+  int shape; //corresponds to a shape id. 
   char closed;
 } ToolPath;
 
@@ -87,7 +87,7 @@ typedef struct {
   int id;
   int numToolpaths;
   unsigned int stroke;
-} City;
+} Shape;
 
 typedef struct TransformSettings {
     float scale;
@@ -122,7 +122,7 @@ typedef struct GCodeState {
     int zFeed;
     int tempFeed;
     int slowTravel;
-    int cityStart;
+    int shapeStart;
     float zFloor;
     float ztraverse;
     char xy;
@@ -298,7 +298,7 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
-static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, City* cities, FILE* debug) {
+static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
   int i, j, k, l, p, b, bezCount;
@@ -310,8 +310,8 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Cit
   int shapeCount = 0;
   for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
     for (path = shape->paths; path != NULL; path = path->next) {
-      cities[i].id = i;
-      cities[i].stroke = shape->stroke.color;
+      shapes[i].id = i;
+      shapes[i].stroke = shape->stroke.color;
       for (j = 0; j < path->npts - 1; j += 3) {
         float* pp = &path->pts[j * 2];
         if (j == 0) {
@@ -323,8 +323,8 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Cit
           paths[k].points[b] = pp[b];
         }
         paths[k].closed = path->closed;
-        paths[k].city = i;
-        cities[i].numToolpaths++;
+        paths[k].shape = i;
+        shapes[i].numToolpaths++;
         k++;
       }
       cont:
@@ -337,7 +337,7 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Cit
         printf("Error: i > pathCount\n");
         exit(-1);
       }
-      state->maxPaths = MAXINT(cities[i].numToolpaths, state->maxPaths);
+      state->maxPaths = MAXINT(shapes[i].numToolpaths, state->maxPaths);
       i++;
     }
     j++;
@@ -348,14 +348,14 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Cit
 
 
 //submethod for mergeSort
-void merge(City * arr, int left, int mid, int right) {
+void merge(Shape * arr, int left, int mid, int right) {
     int n1 = mid - left + 1;
     int n2 = right - mid;
 
-    City *leftArr = (City *) malloc(n1 * sizeof(City));
-    City *rightArr = (City *) malloc(n2 * sizeof(City));
-    memset(leftArr, 0, n1 * sizeof(City));
-    memset(rightArr, 0, n2 * sizeof(City));
+    Shape *leftArr = (Shape *) malloc(n1 * sizeof(Shape));
+    Shape *rightArr = (Shape *) malloc(n2 * sizeof(Shape));
+    memset(leftArr, 0, n1 * sizeof(Shape));
+    memset(rightArr, 0, n2 * sizeof(Shape));
 
     for (int i = 0; i < n1; i++) {
         leftArr[i] = arr[left + i];
@@ -392,8 +392,8 @@ void merge(City * arr, int left, int mid, int right) {
     free(rightArr);
 }
 
-//sub array implementation of merge sort for sorting cities by color
-void mergeSort(City * arr, int left, int right, int level, int* mergeLevel) {
+//sub array implementation of merge sort for sorting shapes by color
+void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel) {
   if(level > *mergeLevel){
     printf("Merge Sort level: %d\n", level);
     *mergeLevel = level;
@@ -415,7 +415,7 @@ int colorInPen(Pen pen, unsigned int color, int colorCount){
   return 0;
 }
 
-//calculate the svg space bounds for the image and create initial city sized list of colors.
+//calculate the svg space bounds for the image and create initial shape sized list of colors.
 static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int penColorCount[6])
 {
   struct NSVGshape* shape;
@@ -461,11 +461,15 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
 }
 
 
+static void threeOptReorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList, int quality){
+
+}
+
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
 //reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* penList, int quality) {
+static void reorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList, int quality) {
   int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
-  City temp;
+  Shape temp;
   float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
   SVGPoint p1,p2,p3,p4;
   SVGPoint pn1,pn2,pn3,pn4;
@@ -481,10 +485,10 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       indexB = indexA;
       indexA = temp1;
     }
-    pn1 = pts[cities[indexA].id];
-    pn2 = pts[cities[indexA+1].id];
-    pn3 = pts[cities[indexB].id];
-    pn4 = pts[cities[indexB+1].id];
+    pn1 = pts[shapes[indexA].id];
+    pn2 = pts[shapes[indexA+1].id];
+    pn3 = pts[shapes[indexB].id];
+    pn4 = pts[shapes[indexB+1].id];
     dnx = pn1.x-pn2.x;
     dny = pn1.y-pn2.y;
     if(xy) {
@@ -518,9 +522,9 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
       indexH = indexB;
       indexL = indexA+1;
       while(indexH > indexL) {
-        temp = cities[indexL];
-        cities[indexL]=cities[indexH];
-        cities[indexH] = temp;
+        temp = shapes[indexL];
+        shapes[indexL]=shapes[indexH];
+        shapes[indexH] = temp;
         indexH--;
         indexL++;
       }
@@ -648,7 +652,7 @@ void printGCodeState(GCodeState* state) {
   printf("zFeed: %d\n", state->zFeed);
   printf("tempFeed: %d\n", state->tempFeed);
   printf("slowTravel: %d\n", state->slowTravel);
-  printf("cityStart: %d\n", state->cityStart);
+  printf("shapeStart: %d\n", state->shapeStart);
   printf("zFloor: %f\n", state->zFloor);
   printf("ztraverse: %f\n", state->ztraverse);
   printf("xy: %c\n", state->xy);
@@ -682,7 +686,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.pointsCulledBounds = 0;
   state.tempFeed = 0;
   state.slowTravel = 3500;
-  state.cityStart = 1;
+  state.shapeStart = 1;
   state.zFloor = paperDimensions[4];
   state.ztraverse = paperDimensions[5];
   state.xy = 1;
@@ -731,15 +735,15 @@ void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
   fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
 
-void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, City * cities, int * i) {
+void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape * shapes, int * i) {
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
-    gcodeState->targetColor = cities[*i].stroke;
-    if(colorInPen(penList[gcodeState->currTool], cities[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new city's color is assigned to current tool
+    gcodeState->targetColor = shapes[*i].stroke;
+    if(colorInPen(penList[gcodeState->currTool], shapes[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new shape's color is assigned to current tool
 #ifdef DEBUG_OUTPUT
-      fprintf(gcode, "( City stroke:%i currTool:%i )\n", cities[*i].stroke, gcodeState->currTool);
+      fprintf(gcode, "( Shape stroke:%i currTool:%i )\n", shapes[*i].stroke, gcodeState->currTool);
 #endif
       for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
-        if(colorInPen(penList[p], cities[*i].stroke, penColorCount[p])){ //If tool p contains the new city's color,
+        if(colorInPen(penList[p], shapes[*i].stroke, penColorCount[p])){ //If tool p contains the new shape's color,
           gcodeState->targetTool = p; //Set the target tool to tool p.
           break;
         }
@@ -810,7 +814,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   fprintf(gcode, "( Intermediary Points: %d )\n", gcodeState->countIntermediary);
   fprintf(gcode, "( PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
 #ifdef DEBUG_OUTPUT
-  //fprintf(gcode, " (MaxPaths in a city: %i)\n", gcodeState->maxPaths);
+  //fprintf(gcode, " (MaxPaths in a shape: %i)\n", gcodeState->maxPaths);
 #endif
 }
 
@@ -963,7 +967,7 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
 }
 
 //Now work on refactoring writeShape.
-void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, City * cities, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i cities.
+void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int writeShape = 1;
     int j, l; //local iterators with k <= j, l < npaths;
@@ -974,7 +978,7 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     int pathPointsIndex = 2;
     for(j = *k; j < gcodeState->npaths; j++) {
         int level;
-        if(toolPaths[j].city == cities[*i].id) {
+        if(toolPaths[j].shape == shapes[*i].id) {
             bezCount = 0;
             level = 0;
             
@@ -986,7 +990,7 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
               pathPointsIndex += 2; //pathPointsIndex-2 is x of endpoint
             }
 
-            toolPaths[j].city = -1; // This path has been written
+            toolPaths[j].shape = -1; // This path has been written
         } else {
             break;
         }
@@ -1066,7 +1070,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   int i, j, k, l = 1;
   SVGPoint* points;
   ToolPath* toolPaths;
-  City *cities; //Corresponds to an NSVGPath
+  Shape *shapes; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
   GCodeState gcodeState = initializeGCodeState(paperDimensions, generationConfig);
@@ -1109,7 +1113,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     return -1;
   }
 
-  //Bank of pens, their slot and their color. Pens also track count of cities to be drawn with their color (for debug purposes)
+  //Bank of pens, their slot and their color. Pens also track count of shapes to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
   memset(penList, 0, numTools*sizeof(Pen));
   //assign pen colors for penColors input
@@ -1139,47 +1143,47 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   // allocate memory
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
-  cities = (City*)malloc(pathCount*sizeof(City));
+  shapes = (Shape*)malloc(pathCount*sizeof(Shape));
   memset(points, 0, pathCount*sizeof(SVGPoint));
   memset(toolPaths, 0, pointsCount*sizeof(ToolPath));
-  memset(cities, 0, pathCount*sizeof(City));
+  memset(shapes, 0, pathCount*sizeof(Shape));
   gcodeState.npaths = 0;
 
-  calcPaths(points, toolPaths, &gcodeState, cities, debug);
+  calcPaths(points, toolPaths, &gcodeState, shapes, debug);
   //alloc a worst case array for storing calculated draw points
-  //malloc for (maxPathsinCity * maxNumberofPointsperBez * xandy * sizeofInt)
+  //malloc for (maxPathsinShape * maxNumberofPointsperBez * xandy * sizeofInt)
   gcodeState.pathPoints = malloc(gcodeState.maxPaths * maxBez * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
   if (gcodeState.pathPoints == NULL) {
     printf("Memory allocation failed!\n");
     exit(1);
   }
 
-  //Sorting cities for path optimization
-  printf("Reorder with numCities: %d\n",pathCount);
+  //Sorting shapes for path optimization
+  printf("Reorder with numShapes: %d\n",pathCount);
   for(k=0;k < gcodeState.numReord; k++) {
-    reorder(points, pathCount, gcodeState.xy, cities, penList, gcodeState.quality);
+    reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
     printf("%d... ",k);
     fflush(stdout);
   }
   printf("\n");
 
-  //If cities are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
-  printf("Sorting cities by color\n");
+  //If shapes are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
+  printf("Sorting shapes by color\n");
   int mergeCount = 0;
-  mergeSort(cities, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
+  mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
   //End sorting.
 
   //Break into writeHeader method.
   writeHeader(&gcodeState, gcode, machineType, paperDimensions);
 
   //WRITING PATHS BEGINS HERE. 
-  for(i=0;i<pathCount;i++) { //equal to the number of cities, which is the number of NSVGPaths.
-    gcodeState.cityStart=1;
-    for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the city for each toolpath, and if it is equal to the city in this position's id
-                                          //in cities, then it beigs the print logic. This can almost certainly be optimized because each city does not have npaths paths associated.
-      if(toolPaths[k].city == -1){ //means already written. Go back to start of above for loop and check next.
+  for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
+    gcodeState.shapeStart=1;
+    for(k=0; k < gcodeState.npaths; k++){ //npaths == number of points/ToolPaths in path. Looks at the shape for each toolpath, and if it is equal to the shape in this position's id
+                                          //in shapes, then it beigs the print logic. This can almost certainly be optimized because each shape does not have npaths paths associated.
+      if(toolPaths[k].shape == -1){ //means already written. Go back to start of above for loop and check next.
           continue;
-      } else if(toolPaths[k].city == cities[i].id) { //Condition found for writing a city.
+      } else if(toolPaths[k].shape == shapes[i].id) { //Condition found for writing a shape.
         break;
       }
     }
@@ -1188,13 +1192,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       continue;
     }
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( City %d at i:%d. Color: %i )\n", cities[i].id, i, cities[i].stroke);
+    fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[i].id, i, shapes[i].stroke);
 #endif
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
-    writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, cities, &i);
+    writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
 
     //WRITING MOVES FOR DRAWING 
-    writeShape(gcode, &gcodeState, &settings, cities, toolPaths, &machineType, &k, &i);
+    writeShape(gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
   }
   
   writeFooter(&gcodeState, gcode, machineType);
@@ -1204,7 +1208,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   fclose(gcode);
   free(points);
   free(toolPaths);
-  free(cities);
+  free(shapes);
   free(penList);
   nsvgDelete(g_image);
 
