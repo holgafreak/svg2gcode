@@ -517,7 +517,7 @@ static void reorder(SVGPoint* pts, int pathCount, char xy, City* cities, Pen* pe
     if(ndist2 < ndist) {
       indexH = indexB;
       indexL = indexA+1;
-      while(indexH > indexL) { //test cities swap.
+      while(indexH > indexL) {
         temp = cities[indexL];
         cities[indexL]=cities[indexH];
         cities[indexH] = temp;
@@ -637,10 +637,6 @@ float rotateY(TransformSettings* settings, float firstx, float firsty) {
   float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
   return rotatedY;
 }
-
-//want to rewrite the definition to contain integer values in one array, and float values in another so I don't have to keep passing more and more arguments.
-//machineType 0 = 6-Color, 1 = LFP, 2 = MVP.
-//create int config[], with [scaleToMaterial, centerSvg, svgRotation (rotate = 0,1,2,3) * 90, machineType] 
 
 void printGCodeState(GCodeState* state) {
   printf("\n");  // Start with newline
