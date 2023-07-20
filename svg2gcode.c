@@ -72,7 +72,7 @@ typedef struct {
 } SVGPoint;
 
 typedef struct {
-  unsigned int *colors;
+  int *colors;
   int count;
   int slot;
 } Pen;
@@ -889,7 +889,7 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       gcodeState->y = rotatedY;
       dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, rotatedX, rotatedY);
 
-      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point
+      if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point check logic.
         gcodeState->trackedDist += dist;
         if(gcodeState->trackedDist >= gcodeState->brushDist){ 
           gcodeState->tempx = gcodeState->xold;
