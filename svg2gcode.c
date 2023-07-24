@@ -461,8 +461,28 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
 }
 
 
-static void threeOptReorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList, int quality){
+static void threeOptReorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList){
+  int gain;
+  do {
+    gain = 0;
+    for(int i=0; i<pathCount-3; i++) {
+      for(int j=i+1; j<pathCount-2; j++) {
+        for(int k=j+1; k<pathCount-1; k++) {
+          // calculate the total distance of the three edges (i,i+1), (j,j+1) and (k,k+1)
+          float old_dist = dist(shapes[i], shapes[i+1]) + dist(shapes[j], shapes[j+1]) + dist(shapes[k], shapes[k+1]);
+          
+          // calculate the total distance if we were to replace the three edges with (i,j), (j+1,k) and (k+1,i+1)
+          float new_dist = dist(shapes[i], shapes[j]) + dist(shapes[j+1], shapes[k]) + dist(shapes[k+1], shapes[i+1]);
 
+          if(new_dist < old_dist) {
+            // Perform the 3-opt swap, i.e., reverse the shapes in the range (i+1, k)
+            //std::reverse(shapes + i + 1, shapes + k + 1); reimplement for c.
+            gain = 1;
+          }
+        }
+      }
+    }
+  } while(gain);
 }
 
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
