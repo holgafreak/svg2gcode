@@ -460,85 +460,94 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   printf("shapeCount = %d\n",shapeCount);
 }
 
-void reverse(Shape* arr, int start, int end) {
-  Shape temp;
-  while (start < end) {
-    temp = arr[start];
-    arr[start] = arr[end];
-    arr[end] = temp;
-    start++;
-    end--;
-  }
-}
-
-float dist(const Shape a, const Shape b, const SVGPoint* pts) {
-  // get the toolpaths for each shape
-  const SVGPoint tpA = pts[a.id];
-  const SVGPoint tpB = pts[b.id];
-
-  // calculate the distance between the end points of the first toolpaths of each shape
-  float dx = tpA.x - tpB.x;
-  float dy = tpA.y - tpB.y;
+float distance(SVGPoint* points, int i, int j) {
+  float dx = points[i].x - points[j].x;
+  float dy = points[i].y - points[j].y;
   return sqrt(dx*dx + dy*dy);
 }
 
-void updateDistances(Shape* shapes, SVGPoint* pts, float** distMatrix, int start, int end) {
-  for(int i = start; i <= end; i++) {
-    for(int j = 0; j < pathCount; j++) {
-      if (j < start || j > end) {
-        distMatrix[i][j] = dist(shapes[i], shapes[j], pts);
-        distMatrix[j][i] = distMatrix[i][j];
-      }
+float svgPointDistance(SVGPoint p1, SVGPoint p2) {
+    float dx = p1.x - p2.x;
+    float dy = p1.y - p2.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+// Function to calculate the total distance of a tour
+float tour_distance(Shape* shapes, float** distances, int pathCount) {
+  float total = 0.0;
+  for (int i = 0; i < pathCount - 1; i++) {
+    total += distances[shapes[i].id][shapes[i + 1].id];
+  }
+  return total;
+}
+
+// Function to swap two shapes in the array
+void swap(Shape* shapes, int i, int j) {
+  Shape temp = shapes[i];
+  shapes[i] = shapes[j];
+  shapes[j] = temp;
+}
+
+float randomFloat() {
+  return (float)rand() / (float)RAND_MAX ;
+}
+
+void computeDistances(SVGPoint* points, float** distances, int pathCount) {
+  for (int i = 0; i < pathCount; i++) {
+    for (int j = i; j < pathCount; j++) {
+      distances[i][j] = distance(points, i, j);
+      distances[j][i] = distances[i][j];  // because the distance from i to j is the same as from j to i
     }
   }
 }
 
-static void threeOptReorder(SVGPoint* pts, int pathCount, Shape* shapes, float** distMatrix){
-  int gain;
-  int countIterations = 0;
-  int countReverse = 0;
-  do {
-    gain = 0;
-    printf("Iteration: %d\n", countIterations++);
-    fflush(stdout);
-    for(int i=0; i<pathCount-3; i++) {
-      for(int j=i+1; j<pathCount-2; j++) {
-        for(int k=j+1; k<pathCount-1; k++) {
-          // calculate the total distance of the three edges (i,i+1), (j,j+1) and (k,k+1)
-          float old_dist = 0;
-          float new_dist = 0;
-          int pairs[6][2] = {{i, i+1}, {j, j+1}, {k, k+1}, {i, j}, {j+1, k}, {k+1, i+1}};
-          for (int p=0; p<6; p++) {
-            int shape_a = pairs[p][0];
-            int shape_b = pairs[p][1];
-            if (distMatrix[shape_a][shape_b] == -1) {
-              distMatrix[shape_a][shape_b] = dist(shapes[shape_a], shapes[shape_b], pts);
-              distMatrix[shape_b][shape_a] = distMatrix[shape_a][shape_b];
-            }
-            if (p < 3) {
-              old_dist += distMatrix[shape_a][shape_b];
-            } else {
-              new_dist += distMatrix[shape_a][shape_b];
-            }
-          }
-
-          if(new_dist < old_dist) {
-            reverse(shapes, i + 1, k + 1);
-            // Update the distances in distMatrix affected by the reversal
-            updateDistances(shapes, pts, distMatrix, i, k + 1);
-            gain = 1;
-            countReverse++;
-            goto swap_performed;
-          }
+void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality) {
+  double temp = initialTemp;
+  double lastPrintTemp = initialTemp;  // Remember the last temperature we printed
+  float currentDistance = tour_distance(shapes, distances, pathCount);
+  int numComp = floor(sqrt(pathCount) * (quality+1));
+  Shape tempShape;
+    
+  while (temp > 1) {
+    for(int i = 0; i < pathCount; i++) {
+      int indexA = rand() % (pathCount - 2);
+      int indexB = rand() % (pathCount - 2);
+      if(abs(indexB - indexA) < 2) {
+        continue;
+      }
+      if(indexB < indexA) {
+        int temp1 = indexB;
+        indexB = indexA;
+        indexA = temp1;
+      }
+            
+      float oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
+      float newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
+            
+      if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
+        int indexH = indexB;
+        int indexL = indexA + 1;
+        while(indexH > indexL) {
+          tempShape = shapes[indexL];
+          shapes[indexL] = shapes[indexH];
+          shapes[indexH] = tempShape;
+          indexH--;
+          indexL++;
         }
+        currentDistance -= oldDist - newDist;
       }
     }
-    swap_performed: ;
-  } while(gain && countIterations < 10);
-  printf("3-Opt Stats\n");
-  printf("  Number of Iterations: %d\n", countIterations);
-  printf("  Number of Reversals: %d\n", countReverse);
+    temp *= 1 - coolingRate;
+
+    if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
+        printf("Temp: %f\n", temp);
+        fflush(stdout);
+        lastPrintTemp = temp;
+    }
+  }
+  printf("Un-Scaled Non-Write Travel: %f\n", currentDistance);
 }
+
 
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
 //reorder the paths to minimize cutter movement. //default is xy = 1
@@ -1214,10 +1223,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
    printf("can't open output %s\n",argv[optind+1]);
    return -1;
  }
-  //fprintf(gcode, "w x h: %f x %f\n", w, h);
-  printf("paths %d points %d\n",pathCount, pointsCount);
-  //fprintf(gcode, "( centerX:%f, centerY:%f )\n", centerX, centerY);
-  // allocate memory
+
+  printf("Paths %d Points %d\n",pathCount, pointsCount);
+
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   shapes = (Shape*)malloc(pathCount*sizeof(Shape));
@@ -1234,31 +1242,34 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("Memory allocation failed!\n");
     exit(1);
   }
-
-  //We need to init the distance matrix here to optimize threeOpt.
-  float** distMatrix = malloc(pathCount * sizeof(float*));
-  for(int i = 0; i < pathCount; i++) {
-      distMatrix[i] = malloc(pathCount * sizeof(float));
-      for(int k = 0; k < pathCount; k++){
-        distMatrix[i][k] = -1;
-      }
-  }
+  srand(time(0));
 
   //Sorting shapes for path optimization
   printf("Reorder with numShapes: %d\n",pathCount);
-  threeOptReorder(points, pathCount, shapes, distMatrix);
+
+  //Simulated annealing implementation for path optimization.
+  double initialTemp = pathCount*pathCount;
+  float coolingRate = 0.0025;
+
+  float** distances = (float**)malloc(pathCount * sizeof(float*));
+  for (int i = 0; i < pathCount; i++) {
+    distances[i] = (float*)malloc(pathCount * sizeof(float));
+  }
+  computeDistances(points, distances, pathCount);
+  simulatedAnnealing(shapes, distances, pathCount, initialTemp, coolingRate, gcodeState.quality);
+
+  for (int i = 0; i < pathCount; i++) {
+      free(distances[i]);
+  }
+  free(distances);
+
+
   // for(k=0;k < gcodeState.numReord; k++) {
   //   reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
   //   printf("%d... ",k);
   //   fflush(stdout);
   // }
   printf("\n");
-
-  //Free distMatrix
-  for(int i = 0; i < pathCount; i++) {
-    free(distMatrix[i]);
-  }
-  free(distMatrix);
 
   //If shapes are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting shapes by color\n");
