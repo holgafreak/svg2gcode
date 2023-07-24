@@ -460,30 +460,85 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   printf("shapeCount = %d\n",shapeCount);
 }
 
+void reverse(Shape* arr, int start, int end) {
+  Shape temp;
+  while (start < end) {
+    temp = arr[start];
+    arr[start] = arr[end];
+    arr[end] = temp;
+    start++;
+    end--;
+  }
+}
 
-// static void threeOptReorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList){
-//   int gain;
-//   do {
-//     gain = 0;
-//     for(int i=0; i<pathCount-3; i++) {
-//       for(int j=i+1; j<pathCount-2; j++) {
-//         for(int k=j+1; k<pathCount-1; k++) {
-//           // calculate the total distance of the three edges (i,i+1), (j,j+1) and (k,k+1)
-//           //float old_dist = dist(shapes[i], shapes[i+1]) + dist(shapes[j], shapes[j+1]) + dist(shapes[k], shapes[k+1]);
-          
-//           // calculate the total distance if we were to replace the three edges with (i,j), (j+1,k) and (k+1,i+1)
-//           //float new_dist = dist(shapes[i], shapes[j]) + dist(shapes[j+1], shapes[k]) + dist(shapes[k+1], shapes[i+1]);
+float dist(const Shape a, const Shape b, const SVGPoint* pts) {
+  // get the toolpaths for each shape
+  const SVGPoint tpA = pts[a.id];
+  const SVGPoint tpB = pts[b.id];
 
-//           //if(new_dist < old_dist) {
-//             // Perform the 3-opt swap, i.e., reverse the shapes in the range (i+1, k)
-//             //std::reverse(shapes + i + 1, shapes + k + 1); reimplement for c.
-//             //gain = 1;
-//           //}
-//         }
-//       }
-//     }
-//   } while(gain);
-// }
+  // calculate the distance between the end points of the first toolpaths of each shape
+  float dx = tpA.x - tpB.x;
+  float dy = tpA.y - tpB.y;
+  return sqrt(dx*dx + dy*dy);
+}
+
+void updateDistances(Shape* shapes, SVGPoint* pts, float** distMatrix, int start, int end) {
+  for(int i = start; i <= end; i++) {
+    for(int j = 0; j < pathCount; j++) {
+      if (j < start || j > end) {
+        distMatrix[i][j] = dist(shapes[i], shapes[j], pts);
+        distMatrix[j][i] = distMatrix[i][j];
+      }
+    }
+  }
+}
+
+static void threeOptReorder(SVGPoint* pts, int pathCount, Shape* shapes, float** distMatrix){
+  int gain;
+  int countIterations = 0;
+  int countReverse = 0;
+  do {
+    gain = 0;
+    printf("Iteration: %d\n", countIterations++);
+    fflush(stdout);
+    for(int i=0; i<pathCount-3; i++) {
+      for(int j=i+1; j<pathCount-2; j++) {
+        for(int k=j+1; k<pathCount-1; k++) {
+          // calculate the total distance of the three edges (i,i+1), (j,j+1) and (k,k+1)
+          float old_dist = 0;
+          float new_dist = 0;
+          int pairs[6][2] = {{i, i+1}, {j, j+1}, {k, k+1}, {i, j}, {j+1, k}, {k+1, i+1}};
+          for (int p=0; p<6; p++) {
+            int shape_a = pairs[p][0];
+            int shape_b = pairs[p][1];
+            if (distMatrix[shape_a][shape_b] == -1) {
+              distMatrix[shape_a][shape_b] = dist(shapes[shape_a], shapes[shape_b], pts);
+              distMatrix[shape_b][shape_a] = distMatrix[shape_a][shape_b];
+            }
+            if (p < 3) {
+              old_dist += distMatrix[shape_a][shape_b];
+            } else {
+              new_dist += distMatrix[shape_a][shape_b];
+            }
+          }
+
+          if(new_dist < old_dist) {
+            reverse(shapes, i + 1, k + 1);
+            // Update the distances in distMatrix affected by the reversal
+            updateDistances(shapes, pts, distMatrix, i, k + 1);
+            gain = 1;
+            countReverse++;
+            goto swap_performed;
+          }
+        }
+      }
+    }
+    swap_performed: ;
+  } while(gain && countIterations < 10);
+  printf("3-Opt Stats\n");
+  printf("  Number of Iterations: %d\n", countIterations);
+  printf("  Number of Reversals: %d\n", countReverse);
+}
 
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
 //reorder the paths to minimize cutter movement. //default is xy = 1
@@ -1180,14 +1235,30 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     exit(1);
   }
 
+  //We need to init the distance matrix here to optimize threeOpt.
+  float** distMatrix = malloc(pathCount * sizeof(float*));
+  for(int i = 0; i < pathCount; i++) {
+      distMatrix[i] = malloc(pathCount * sizeof(float));
+      for(int k = 0; k < pathCount; k++){
+        distMatrix[i][k] = -1;
+      }
+  }
+
   //Sorting shapes for path optimization
   printf("Reorder with numShapes: %d\n",pathCount);
-  for(k=0;k < gcodeState.numReord; k++) {
-    reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
-    printf("%d... ",k);
-    fflush(stdout);
-  }
+  threeOptReorder(points, pathCount, shapes, distMatrix);
+  // for(k=0;k < gcodeState.numReord; k++) {
+  //   reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
+  //   printf("%d... ",k);
+  //   fflush(stdout);
+  // }
   printf("\n");
+
+  //Free distMatrix
+  for(int i = 0; i < pathCount; i++) {
+    free(distMatrix[i]);
+  }
+  free(distMatrix);
 
   //If shapes are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting shapes by color\n");
@@ -1226,6 +1297,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   writeFooter(&gcodeState, gcode, machineType);
 
   printf("( Total distance traveled = %f m, PointsCulledPrec: = %d)\n", gcodeState.totalDist, gcodeState.pointsCulledPrec);
+  fflush(stdout);
   free(gcodeState.pathPoints);
   fclose(gcode);
   free(points);
