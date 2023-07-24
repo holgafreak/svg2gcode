@@ -1248,8 +1248,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Reorder with numShapes: %d\n",pathCount);
 
   //Simulated annealing implementation for path optimization.
-  double initialTemp = pathCount*pathCount;
-  float coolingRate = 0.0025;
+  double initialTemp = (pathCount/2)*sqrt(pathCount);
+  float coolingRate = 0.005;
 
   float** distances = (float**)malloc(pathCount * sizeof(float*));
   for (int i = 0; i < pathCount; i++) {
