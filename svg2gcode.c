@@ -567,7 +567,8 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
 void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
   double temp = initialTemp;
   double lastPrintTemp = initialTemp;
-  float currentDistance, previousDistance = tour_distance(shapes, distances, pathCount);
+  float oldDist, newDist = 0;
+  float currentDistance= tour_distance(shapes, distances, pathCount);
   Shape tempShape;
   printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
     
@@ -584,10 +585,11 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
         indexA = temp1;
       }
             
-      float oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
-      float newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
-            
-      if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
+      oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
+      newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
+            //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
+      //if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
+      if(newDist < oldDist) {
         int indexH = indexB;
         int indexL = indexA + 1;
         while(indexH > indexL) {
@@ -604,9 +606,8 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
         printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
-        printf("  Delta dist: %f\n", previousDistance - currentDistance);
+        printf("  Delta dist: %f\n", oldDist - newDist);
         fflush(stdout);
-        previousDistance = currentDistance;
         lastPrintTemp = temp;
     }
   }
@@ -1331,7 +1332,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   computeDistances(points, distances, pathCount);
   double initialTemp = (pathCount/3)*sqrt(pathCount);
   float coolingRate = 0.015;
-  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*5;
+  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*10;
 
 #ifdef SA_ANALYSIS
   FILE* sa_analysis = fopen("SA_Analysis.csv", "w");
