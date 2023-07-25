@@ -1331,7 +1331,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   computeDistances(points, distances, pathCount);
   double initialTemp = (pathCount/3)*sqrt(pathCount);
   float coolingRate = 0.015;
-  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*10;
+  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*5;
 
 #ifdef SA_ANALYSIS
   FILE* sa_analysis = fopen("SA_Analysis.csv", "w");
