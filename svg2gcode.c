@@ -45,6 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
+//#define SA_ANALYSIS
 #define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
@@ -501,15 +502,20 @@ void computeDistances(SVGPoint* points, float** distances, int pathCount) {
   }
 }
 
-void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality) {
+#ifdef SA_ANALYSIS
+void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp, FILE* out) {
+  clock_t start, end;
+  double cpu_time_used;
+  
+  start = clock();
+  
   double temp = initialTemp;
-  double lastPrintTemp = initialTemp;  // Remember the last temperature we printed
+  double lastPrintTemp = initialTemp;
   float currentDistance = tour_distance(shapes, distances, pathCount);
-  int numComp = floor(sqrt(pathCount) * (quality+1));
   Shape tempShape;
     
   while (temp > 1) {
-    for(int i = 0; i < pathCount; i++) {
+    for(int i = 0; i < numComp; i++) {
       int indexA = rand() % (pathCount - 2);
       int indexB = rand() % (pathCount - 2);
       if(abs(indexB - indexA) < 2) {
@@ -540,13 +546,76 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
     temp *= 1 - coolingRate;
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
-        printf("Temp: %f\n", temp);
+        printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
         fflush(stdout);
         lastPrintTemp = temp;
     }
   }
+  
+  end = clock();
+  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+  
+  fprintf(out, "%f, %f, %d, %f, %f\n", initialTemp, coolingRate, numComp, currentDistance, cpu_time_used);
+
+  fflush(out);
+  
   printf("Un-Scaled Non-Write Travel: %f\n", currentDistance);
 }
+#endif
+
+#ifndef SA_ANALYSIS
+void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
+  double temp = initialTemp;
+  double lastPrintTemp = initialTemp;
+  float currentDistance, previousDistance = tour_distance(shapes, distances, pathCount);
+  Shape tempShape;
+  printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
+    
+  while (temp > 1) {
+    for(int i = 0; i < numComp; i++) {
+      int indexA = rand() % (pathCount - 2);
+      int indexB = rand() % (pathCount - 2);
+      if(abs(indexB - indexA) < 2) {
+        continue;
+      }
+      if(indexB < indexA) {
+        int temp1 = indexB;
+        indexB = indexA;
+        indexA = temp1;
+      }
+            
+      float oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
+      float newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
+            
+      if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
+        int indexH = indexB;
+        int indexL = indexA + 1;
+        while(indexH > indexL) {
+          tempShape = shapes[indexL];
+          shapes[indexL] = shapes[indexH];
+          shapes[indexH] = tempShape;
+          indexH--;
+          indexL++;
+        }
+        currentDistance -= oldDist - newDist;
+      }
+    }
+    temp *= 1 - coolingRate;
+
+    if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
+        printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
+        printf("  Delta dist: %f\n", previousDistance - currentDistance);
+        fflush(stdout);
+        previousDistance = currentDistance;
+        lastPrintTemp = temp;
+    }
+  }
+
+  printf("Un-Scaled Non-Write Travel: %f\n", currentDistance);
+
+}
+#endif
+
 
 
 //need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
@@ -1148,6 +1217,12 @@ void help() {
   printf("\t-h this help\n");
 }
 
+int compareShapes(const void* a, const void* b) {
+    Shape* shapeA = (Shape*) a;
+    Shape* shapeB = (Shape*) b;
+    return (shapeA->id - shapeB->id);
+}
+
 int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
@@ -1248,21 +1323,48 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Reorder with numShapes: %d\n",pathCount);
 
   //Simulated annealing implementation for path optimization.
-  double initialTemp = (pathCount/2)*sqrt(pathCount);
-  float coolingRate = 0.005;
-
   float** distances = (float**)malloc(pathCount * sizeof(float*));
   for (int i = 0; i < pathCount; i++) {
     distances[i] = (float*)malloc(pathCount * sizeof(float));
   }
+
   computeDistances(points, distances, pathCount);
-  simulatedAnnealing(shapes, distances, pathCount, initialTemp, coolingRate, gcodeState.quality);
+  double initialTemp = (pathCount/3)*sqrt(pathCount);
+  float coolingRate = 0.015;
+  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*10;
+
+#ifdef SA_ANALYSIS
+  FILE* sa_analysis = fopen("SA_Analysis.csv", "w");
+  if(sa_analysis==NULL) {
+    printf("Failed to open SA_Logging file\n");
+    return -1;
+  }
+
+  fprintf(sa_analysis, "Initial Temp, Cooling Rate, Num Comp, Final Distance, Time\n");
+   //Loop here
+  double testTemps[3] = {(pathCount/2)*sqrt(pathCount), pathCount*sqrt(pathCount), (pathCount/4)*sqrt(pathCount)};
+  float coolingRates[3] = {0.02, 0.015, 0.01};
+  int numComps[5] = {(sqrt(pointsCount))*1, (sqrt(pointsCount))*1.5, (sqrt(pointsCount))*2, (sqrt(pointsCount))*3, (sqrt(pointsCount))*5};
+  
+  for(int i = 0; i < 3; i++){
+    for(int j = 0; j < 3; j++){
+      for(int k = 0; k < 5; k++){
+        simulatedAnnealing(shapes, distances, pathCount, testTemps[i], coolingRates[j], gcodeState.quality, numComps[k], sa_analysis);
+        qsort(shapes, pathCount, sizeof(Shape), compareShapes);
+      }
+    }
+  }
+  //End loop here
+  fclose(sa_analysis);
+#endif
+
+  //Simulated Annealing call
+  simulatedAnnealing(shapes, distances, pathCount, initialTemp, coolingRate, gcodeState.quality, saNumComp);
 
   for (int i = 0; i < pathCount; i++) {
       free(distances[i]);
   }
   free(distances);
-
 
   // for(k=0;k < gcodeState.numReord; k++) {
   //   reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
