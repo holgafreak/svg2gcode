@@ -49,6 +49,7 @@
 #define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
+#define BUFFER_SIZE 8192 //Character buffer size for writing to files.
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
 
 
@@ -475,138 +476,65 @@ float svgPointDistance(SVGPoint p1, SVGPoint p2) {
     return sqrt(dx * dx + dy * dy);
 }
 
-// Function to calculate the total distance of a tour
-float tour_distance(Shape* shapes, float** distances, int pathCount) {
-  float total = 0.0;
-  for (int i = 0; i < pathCount - 1; i++) {
-    total += distances[shapes[i].id][shapes[i + 1].id];
+float tour_distance(Shape* shapes, SVGPoint* points, int pathCount){
+  double total = 0.0;
+  for(int i = 0; i < pathCount; i++){
+    total += svgPointDistance(points[shapes[i].id], points[shapes[i+1].id]);
   }
   return total;
-}
-
-// Function to swap two shapes in the array
-void swap(Shape* shapes, int i, int j) {
-  Shape temp = shapes[i];
-  shapes[i] = shapes[j];
-  shapes[j] = temp;
 }
 
 float randomFloat() {
   return (float)rand() / (float)RAND_MAX ;
 }
 
-void computeDistances(SVGPoint* points, float** distances, int pathCount) {
-  for (int i = 0; i < pathCount; i++) {
-    for (int j = i; j < pathCount; j++) {
-      distances[i][j] = distance(points, i, j);
-      distances[j][i] = distances[i][j];  // because the distance from i to j is the same as from j to i
-    }
-  }
-}
 
-#ifdef SA_ANALYSIS
-void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp, FILE* out) {
-  clock_t start, end;
-  double cpu_time_used;
-  
-  start = clock();
-  
-  double temp = initialTemp;
-  double lastPrintTemp = initialTemp;
-  float currentDistance = tour_distance(shapes, distances, pathCount);
-  Shape tempShape;
-    
-  while (temp > 1) {
-    for(int i = 0; i < numComp; i++) {
-      int indexA = rand() % (pathCount - 2);
-      int indexB = rand() % (pathCount - 2);
-      if(abs(indexB - indexA) < 2) {
-        continue;
-      }
-      if(indexB < indexA) {
-        int temp1 = indexB;
-        indexB = indexA;
-        indexA = temp1;
-      }
-            
-      float oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
-      float newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
-            
-      if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
-        int indexH = indexB;
-        int indexL = indexA + 1;
-        while(indexH > indexL) {
-          tempShape = shapes[indexL];
-          shapes[indexL] = shapes[indexH];
-          shapes[indexH] = tempShape;
-          indexH--;
-          indexL++;
-        }
-        currentDistance -= oldDist - newDist;
-      }
-    }
-    temp *= 1 - coolingRate;
-
-    if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
-        printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
-        fflush(stdout);
-        lastPrintTemp = temp;
-    }
-  }
-  
-  end = clock();
-  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-  
-  fprintf(out, "%f, %f, %d, %f, %f\n", initialTemp, coolingRate, numComp, currentDistance, cpu_time_used);
-
-  fflush(out);
-  
-  printf("Un-Scaled Non-Write Travel: %f\n", currentDistance);
-}
-#endif
-
-#ifndef SA_ANALYSIS
-void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
-  clock_t start, end;
-  double cpu_time_used;
+void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
   int count_swaps = 0;
   int count_cycles = 0;
+  int tempInd;
+  int sa_probability = 0;
   
-  start = clock();
   double temp = initialTemp;
   double lastPrintTemp = initialTemp;
   float oldDist, newDist = 0;
-  float previousDistance, currentDistance= tour_distance(shapes, distances, pathCount);
+  float previousDistance, currentDistance= tour_distance(shapes, points, pathCount);
   Shape tempShape;
   printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
     
   while (temp > 1) {
+    previousDistance = currentDistance;
     for(int i = 0; i < numComp; i++) {
-      int indexA = rand() % (pathCount - 2);
-      int indexB = rand() % (pathCount - 2);
-      if(abs(indexB - indexA) < 2) {
+      //Based on stipplegen 2-opt heuristic.
+      int pointA = rand() % (pathCount - 2);
+      int pointB = rand() % (pathCount - 2);
+
+      if(abs(pointB - pointA) < 2) {
         continue;
       }
-      if(indexB < indexA) {
-        int temp1 = indexB;
-        indexB = indexA;
-        indexA = temp1;
-      }
-            
-      oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
-      newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
+
+      if(pointB < pointA) {
+        tempInd = pointB;
+        pointB = pointA;
+        pointA = tempInd;
+      } 
+
+      oldDist = distance(points, shapes[pointA].id, shapes[pointA+1].id) + distance(points, shapes[pointB].id, shapes[pointB+1].id);
+      newDist = distance(points, shapes[pointA].id, shapes[pointB].id) + distance(points, shapes[pointA+1].id, shapes[pointB+1].id);
+
       //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
-      //if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
-      if(newDist < oldDist) {
+      sa_probability = exp((oldDist - newDist) / temp);
+      //if(newDist < oldDist || sa_probability > randomFloat()) {
+      if(newDist < oldDist){
         count_swaps++;
-        int indexH = indexB;
-        int indexL = indexA + 1;
-        while(indexH > indexL) {
-          tempShape = shapes[indexL];
-          shapes[indexL] = shapes[indexH];
-          shapes[indexH] = tempShape;
-          indexH--;
-          indexL++;
+        int indexRight = pointB;  
+        int indexLeft = pointA + 1;
+        while(indexRight > indexLeft) {
+          tempShape = shapes[indexLeft];
+          shapes[indexLeft] = shapes[indexRight];
+          shapes[indexRight] = tempShape;
+          indexRight--;
+          indexLeft++;
         }
         currentDistance -= oldDist - newDist;
       }
@@ -617,22 +545,19 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
         printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
-        printf("  Distance Improvement %f\n", previousDistance - currentDistance);
+        printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
+        printf("  SA_Probability: %f\n", sa_probability);
         fflush(stdout);
         lastPrintTemp = temp;
+
     }
   }
 
-  end = clock();
-  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-
-  printf("Un-Scaled Non-Write Travel: %f\n", tour_distance(shapes, distances, pathCount));
-  printf("Time to reorder: %f\n", cpu_time_used);
+  printf("Un-Scaled Non-Write Travel: %f\n", tour_distance(shapes, points, pathCount));
   printf("Number of swaps %d\n", count_swaps);
   printf("Number of iterations %d\n", count_cycles);
   fflush(stdout);
 }
-#endif
 
 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
@@ -1176,25 +1101,26 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //CLI argument BS may want to remove.
   printf("Argc:%d\n", argc);
   if(argc < 3) {
-    help();
     return -1;
   }
   while((ch=getopt(argc,argv,"D:ABhf:n:s:Fz:Z:S:w:t:m:cTV1aLP:CY:X:")) != EOF) { //I think handoff between argc and argv is happening here so can't remove for sake of opening and outputting to a file.
     switch(ch) {
-    case 'h': help();
-      break;
     case 'f': gcodeState.feed = atoi(optarg);
       break;
     case 'n': gcodeState.numReord = atoi(optarg);
       break;
     case 't': gcodeState.tol = atof(optarg);
       break;
-    default: help();
+    default:
       return(1);
       break;
     }
   }
   //end cli parsing.
+
+  clock_t start_parse, stop_parse;
+  double parse_time;
+  start_parse = clock();
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
@@ -1203,6 +1129,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
   }
+
+  stop_parse = clock();
+  parse_time = ((double) (stop_parse - start_parse)) / CLOCKS_PER_SEC;
 
   //Bank of pens, their slot and their color. Pens also track count of shapes to be drawn with their color (for debug purposes)
   penList = (Pen*)malloc(numTools*sizeof(Pen));
@@ -1229,6 +1158,17 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
    return -1;
  }
 
+ char *writeBuffer = malloc(BUFFER_SIZE);
+ if(writeBuffer == NULL){
+  printf("Write Buffer Alloc Failed\n");
+  return -1;
+ }
+
+  if (setvbuf(gcode, writeBuffer, _IOFBF, BUFFER_SIZE) != 0) {
+      perror("Failed to set buffer");
+      return -1;
+  }
+
   printf("Paths %d Points %d\n",pathCount, pointsCount);
 
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
@@ -1250,54 +1190,32 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   //Simulated annealing implementation for path optimization.
   srand(time(0));
-  float** distances = (float**)malloc(pathCount * sizeof(float*));
-  for (int i = 0; i < pathCount; i++) {
-    distances[i] = (float*)malloc(pathCount * sizeof(float));
-  }
 
-  computeDistances(points, distances, pathCount);
   double initialTemp = 10000;
-  float coolingRate = 0.0125;
+  float coolingRate = 0.0175;
   int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount*2))*(gcodeState.quality+1);
 
-#ifdef SA_ANALYSIS
-  FILE* sa_analysis = fopen("SA_Analysis.csv", "w");
-  if(sa_analysis==NULL) {
-    printf("Failed to open SA_Logging file\n");
-    return -1;
-  }
-
-  fprintf(sa_analysis, "Initial Temp, Cooling Rate, Num Comp, Final Distance, Time\n");
-   //Loop here
-  double testTemps[3] = {(pathCount/2)*sqrt(pathCount), pathCount*sqrt(pathCount), (pathCount/4)*sqrt(pathCount)};
-  float coolingRates[3] = {0.02, 0.015, 0.01};
-  int numComps[5] = {(sqrt(pointsCount))*1, (sqrt(pointsCount))*1.5, (sqrt(pointsCount))*2, (sqrt(pointsCount))*3, (sqrt(pointsCount))*5};
-  
-  for(int i = 0; i < 3; i++){
-    for(int j = 0; j < 3; j++){
-      for(int k = 0; k < 5; k++){
-        simulatedAnnealing(shapes, distances, pathCount, testTemps[i], coolingRates[j], gcodeState.quality, numComps[k], sa_analysis);
-        qsort(shapes, pathCount, sizeof(Shape), compareShapes);
-      }
-    }
-  }
-  //End loop here
-  fclose(sa_analysis);
-#endif
-
   //Simulated Annealing call
-  simulatedAnnealing(shapes, distances, pathCount, initialTemp, coolingRate, gcodeState.quality, saNumComp);
+  clock_t start_sa, stop_sa;
+  double reorder_time;
 
-  for (int i = 0; i < pathCount; i++) {
-      free(distances[i]);
-  }
-  free(distances);
+  start_sa = clock();
+  simulatedAnnealing(shapes, points, pathCount, initialTemp, coolingRate, gcodeState.quality, saNumComp);
+
+  stop_sa = clock();
+  reorder_time = ((double) (stop_sa - start_sa)) / CLOCKS_PER_SEC;
 
   printf("Sorting shapes by color\n");
   int mergeCount = 0;
   mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays.
 
+  //create char buffer for shapes
+
+  clock_t start_write, stop_write;
+  double write_time;
   //Break into writeHeader method.
+
+  start_write = clock();
   writeHeader(&gcodeState, gcode, machineType, paperDimensions);
 
   //WRITING PATHS BEGINS HERE. 
@@ -1322,15 +1240,24 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
 
     //WRITING MOVES FOR DRAWING 
+
     writeShape(gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
   }
   
   writeFooter(&gcodeState, gcode, machineType);
+  stop_write = clock();
+  write_time = ((double) stop_write - start_write) / CLOCKS_PER_SEC;
 
   printf("( Total distance traveled = %f m, PointsCulledPrec: = %d)\n", gcodeState.totalDist, gcodeState.pointsCulledPrec);
+  printf("Timing Details:\n");
+  printf("  ParseTime: %f\n", parse_time);
+  printf("  SA Time: %f\n", reorder_time);
+  printf("  Write Time: %f\n", write_time);
+
   fflush(stdout);
-  free(gcodeState.pathPoints);
   fclose(gcode);
+  free(gcodeState.pathPoints);
+  free(writeBuffer);
   free(points);
   free(toolPaths);
   free(shapes);
