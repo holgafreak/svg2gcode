@@ -299,6 +299,7 @@ static int pcomp(const void* a, const void* b) {
   return -1;
 }
 
+  //This needs to be redone.
 static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -416,6 +417,7 @@ int colorInPen(Pen pen, unsigned int color, int colorCount){
   return 0;
 }
 
+  //This needs to be redone.
 //calculate the svg space bounds for the image and create initial shape sized list of colors.
 static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int penColorCount[6])
 {
@@ -593,7 +595,7 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
             
       oldDist = distances[shapes[indexA].id][shapes[indexA+1].id] + distances[shapes[indexB].id][shapes[indexB+1].id];
       newDist = distances[shapes[indexA].id][shapes[indexB].id] + distances[shapes[indexA+1].id][shapes[indexB+1].id];
-            //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
+      //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
       //if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
       if(newDist < oldDist) {
         count_swaps++;
@@ -632,77 +634,6 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
 }
 #endif
 
-
-
-//need to set up indicies for each color to reorder between, as opposed to reordering the entire list.
-//reorder the paths to minimize cutter movement. //default is xy = 1
-static void reorder(SVGPoint* pts, int pathCount, char xy, Shape* shapes, Pen* penList, int quality) {
-  int i,j,k,temp1,temp2,indexA,indexB, indexH, indexL;
-  Shape temp;
-  float dx,dy,dist,dist2, dnx, dny, ndist, ndist2;
-  SVGPoint p1,p2,p3,p4;
-  SVGPoint pn1,pn2,pn3,pn4;
-  int numComp = floor(sqrt(pointsCount) * (quality+1));
-  for(i=0;i<numComp*pathCount;i++) {
-    indexA = (int)(RANDOM()*(pathCount-2));
-    indexB = (int)(RANDOM()*(pathCount-2));
-    if(abs(indexB-indexA) < 2){
-      continue;
-    }
-    if(indexB < indexA) { //work from left index a and right index b.
-      temp1 = indexB;
-      indexB = indexA;
-      indexA = temp1;
-    }
-    pn1 = pts[shapes[indexA].id];
-    pn2 = pts[shapes[indexA+1].id];
-    pn3 = pts[shapes[indexB].id];
-    pn4 = pts[shapes[indexB+1].id];
-    dnx = pn1.x-pn2.x;
-    dny = pn1.y-pn2.y;
-    if(xy) {
-      ndist = dnx * dnx + dny * dny;
-    } else {
-      ndist = dny * dny;
-    }
-    dnx = pn3.x-pn4.x;
-    dny = pn3.y-pn4.y;
-
-    if(xy) {
-      ndist += (dnx * dnx + dny * dny);
-    } else {
-      ndist += dny * dny;
-    }
-    dnx = pn1.x - pn3.x;
-    dny = pn1.y - pn3.y;
-    if(xy){
-      ndist2 = dnx * dnx + dny * dny;
-    } else {
-      ndist2 = dny * dny;
-    }
-    dnx = pn2.x - pn4.x;
-    dny = pn2.y - pn4.y;
-    if(xy) {
-      ndist2 += dnx * dnx + dny * dny;
-    } else {
-      ndist2 += dny * dny;
-    }
-    if(ndist2 < ndist) {
-      indexH = indexB;
-      indexL = indexA+1;
-      while(indexH > indexL) {
-        temp = shapes[indexL];
-        shapes[indexL]=shapes[indexH];
-        shapes[indexH] = temp;
-        indexH--;
-        indexL++;
-      }
-    }
-  }
-  pathCountOut = pathCount;
-  pointCountOut = pointsCount;
-  numCompOut = numComp;
-}
 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
@@ -1216,23 +1147,6 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 }
 
-void help() {
-  printf("usage: svg2gcode [options] svg-file gcode-file\n");
-  printf("options:\n");
-  printf("\t-Y shift Y-ax\n");
-  printf("\t-X shift X-ax\n");
-  printf("\t-f feed rate (3500)\n");
-  printf("\t-n # number of reorders (30)\n");
-  printf("\t-s scale (1.0)\n");
-  printf("\t-S 1 scale to material size\n");
-  printf("\t-C center on drawing space\n");
-  printf("\t-w final width in mm\n");
-  printf("\t-t Bezier tolerance (0.5)\n");
-  printf("\t-Z z-engage (-1.0)\n");
-  printf("\t-B do Bezier curve smoothing\n");
-  printf("\t-h this help\n");
-}
-
 int compareShapes(const void* a, const void* b) {
     Shape* shapeA = (Shape*) a;
     Shape* shapeB = (Shape*) b;
@@ -1333,12 +1247,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     printf("Memory allocation failed!\n");
     exit(1);
   }
-  srand(time(0));
-
-  //Sorting shapes for path optimization
-  printf("Reorder with numShapes: %d\n",pathCount);
 
   //Simulated annealing implementation for path optimization.
+  srand(time(0));
   float** distances = (float**)malloc(pathCount * sizeof(float*));
   for (int i = 0; i < pathCount; i++) {
     distances[i] = (float*)malloc(pathCount * sizeof(float));
@@ -1382,18 +1293,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
   free(distances);
 
-  // for(k=0;k < gcodeState.numReord; k++) {
-  //   reorder(points, pathCount, gcodeState.xy, shapes, penList, gcodeState.quality);
-  //   printf("%d... ",k);
-  //   fflush(stdout);
-  // }
-  printf("\n");
-
-  //If shapes are reordered by distances first, using a stable sort after for color should maintain the sort order obtained by distances, but organized by colors.
   printf("Sorting shapes by color\n");
   int mergeCount = 0;
-  mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays. So we want to reorder, then call on subarrays indexed by our mapped colors.
-  //End sorting.
+  mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays.
 
   //Break into writeHeader method.
   writeHeader(&gcodeState, gcode, machineType, paperDimensions);
