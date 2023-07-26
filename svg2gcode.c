@@ -565,10 +565,16 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
 
 #ifndef SA_ANALYSIS
 void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
+  clock_t start, end;
+  double cpu_time_used;
+  int count_swaps = 0;
+  int count_cycles = 0;
+  
+  start = clock();
   double temp = initialTemp;
   double lastPrintTemp = initialTemp;
   float oldDist, newDist = 0;
-  float currentDistance= tour_distance(shapes, distances, pathCount);
+  float previousDistance, currentDistance= tour_distance(shapes, distances, pathCount);
   Shape tempShape;
   printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
     
@@ -590,6 +596,7 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
             //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
       //if(newDist < oldDist || exp((oldDist - newDist) / temp) > randomFloat()) {
       if(newDist < oldDist) {
+        count_swaps++;
         int indexH = indexB;
         int indexL = indexA + 1;
         while(indexH > indexL) {
@@ -602,18 +609,26 @@ void simulatedAnnealing(Shape* shapes, float** distances, int pathCount, double 
         currentDistance -= oldDist - newDist;
       }
     }
+
+    count_cycles++;
     temp *= 1 - coolingRate;
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
         printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
-        printf("  Delta dist: %f\n", oldDist - newDist);
+        printf("  Distance Improvement %f\n", previousDistance - currentDistance);
         fflush(stdout);
         lastPrintTemp = temp;
     }
   }
 
-  printf("Un-Scaled Non-Write Travel: %f\n", currentDistance);
+  end = clock();
+  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
+  printf("Un-Scaled Non-Write Travel: %f\n", tour_distance(shapes, distances, pathCount));
+  printf("Time to reorder: %f\n", cpu_time_used);
+  printf("Number of swaps %d\n", count_swaps);
+  printf("Number of iterations %d\n", count_cycles);
+  fflush(stdout);
 }
 #endif
 
@@ -1330,9 +1345,9 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
 
   computeDistances(points, distances, pathCount);
-  double initialTemp = (pathCount/3)*sqrt(pathCount);
-  float coolingRate = 0.015;
-  int saNumComp = sqrt(pointsCount)*(gcodeState.quality+1)*10;
+  double initialTemp = 10000;
+  float coolingRate = 0.0125;
+  int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount*2))*(gcodeState.quality+1);
 
 #ifdef SA_ANALYSIS
   FILE* sa_analysis = fopen("SA_Analysis.csv", "w");
