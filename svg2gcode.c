@@ -105,8 +105,10 @@ typedef struct TransformSettings {
     float originalCenterY;
     float cosRot;
     float sinRot;
-    float xmargin;
-    float ymargin;
+    float xMarginLeft;
+    float xMarginRight;
+    float yMarginTop;
+    float yMarginBottom;
     int fitToMaterial;
     int centerOnMaterial;
     int swapDim;
@@ -551,11 +553,13 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("Image width:%f Image Height:%f\n", width, height);
 
   settings.svgRotation = generationConfig[2];
-  settings.xmargin = paperDimensions[2];
-  settings.ymargin = paperDimensions[3];
+  settings.xMarginLeft = paperDimensions[2];
+  settings.yMarginTop = paperDimensions[3];
+  settings.xMarginRight = paperDimensions[7];
+  settings.yMarginBottom = paperDimensions[8];
   //scaling + fitting operations.
-  settings.drawSpaceWidth = paperDimensions[0] - (2*settings.xmargin);
-  settings.drawSpaceHeight = paperDimensions[1] - (2*settings.ymargin);
+  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight;
+  settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
   settings.swapDim = (generationConfig[2] == 1 || generationConfig[2] == 3);
 
@@ -585,8 +589,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.drawingWidth = width * settings.scale;
     settings.drawingHeight = height * settings.scale;
     printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-    settings.shiftX = settings.xmargin;
-    settings.shiftY = settings.ymargin;
+    settings.shiftX = settings.xMarginLeft;
+    settings.shiftY = settings.yMarginTop;
   } else {
     settings.scale = 1;
   }
@@ -595,8 +599,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // If centering on material, calculate shift
   if (settings.centerOnMaterial) {
-      settings.shiftX = settings.xmargin + ((settings.drawSpaceWidth - settings.drawingWidth) / 2);
-      settings.shiftY = settings.ymargin + ((settings.drawSpaceHeight - settings.drawingHeight) / 2);
+      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.drawingWidth) / 2);
+      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.drawingHeight) / 2);
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
 
@@ -634,8 +638,10 @@ void printTransformSettings(TransformSettings settings) {
   printf("originalCenterY: %f\n", settings.originalCenterY);
   printf("cosRot: %f\n", settings.cosRot);
   printf("sinRot: %f\n", settings.sinRot);
-  printf("xmargin: %f\n", settings.xmargin);
-  printf("ymargin: %f\n", settings.ymargin);
+  printf("xmarginleft: %f\n", settings.xMarginLeft);
+  printf("xmarginright: %f\n", settings.xMarginRight);
+  printf("ymargintop: %f\n", settings.yMarginTop);
+  printf("ymarginbottom: %f\n", settings.yMarginBottom);
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
@@ -849,7 +855,7 @@ int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current
 
 int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode){ //always want to write if it is first or last point in a shape.
   //want a preliminary check that the coordinates are within bounds.
-  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xmargin) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->ymargin))){
+  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop))){
     gcodeState->pointsCulledBounds++;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
@@ -1058,7 +1064,10 @@ int compareShapes(const void* a, const void* b) {
     return (shapeA->id - shapeB->id);
 }
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
+//Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
+//Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
+
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[9]) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
