@@ -545,7 +545,6 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   printf("Number of iterations %d\n", count_cycles);
 }
 
-
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
   float width = g_image->width;
