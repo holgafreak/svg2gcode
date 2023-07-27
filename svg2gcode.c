@@ -153,7 +153,6 @@ typedef struct GCodeState {
 } GCodeState;
 
 SVGPoint bezPoints[maxBez];
-static SVGPoint first,last;
 static int bezCount = 0;
 int collinear = 0;
 #ifdef _WIN32
@@ -172,6 +171,7 @@ static int32_t rand31() {
       tmp2 = (tmp2 + (uint32_t) 1) & (uint32_t) 0x7FFFFFFF;
     return (int32_t)tmp2;
 }
+
 static void seedrand(float seedval) {
   seed = (int32_t) ((double) seedval + 0.5);
   if (seed < 1L) {                   /* seed from current time */
@@ -285,22 +285,13 @@ static void cubicBez(float x1, float y1, float x2, float y2,
   }
 }
 
-#ifdef _WIN32 //win doesn't have good RNG
-#define RANDOM() drnd31() //((double)rand()/(double)RAND_MAX)
+#ifdef _WIN32
+#define RANDOM() drnd31()
 #else //OSX LINUX much faster than win
 #define RANDOM() (drand48())
 #endif
 
-static int pcomp(const void* a, const void* b) {
-  SVGPoint* ap = (SVGPoint*)a;
-  SVGPoint* bp = (SVGPoint*)b;
-  if(sqrt(ap->x*ap->x + ap->y*ap->y) > sqrt(bp->x*bp->x+bp->y*bp->y)) {
-    return 1;
-  }
-  return -1;
-}
-
-  //This needs to be redone.
+//This needs to be redone.
 static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Shape* shapes, FILE* debug) {
   struct NSVGshape* shape;
   struct NSVGpath* path;
@@ -464,22 +455,16 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   printf("shapeCount = %d\n",shapeCount);
 }
 
-float distance(SVGPoint* points, int i, int j) {
-  float dx = points[i].x - points[j].x;
-  float dy = points[i].y - points[j].y;
-  return sqrt(dx*dx + dy*dy);
-}
-
-float svgPointDistance(SVGPoint p1, SVGPoint p2) {
-    float dx = p1.x - p2.x;
-    float dy = p1.y - p2.y;
+float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
+    float dx = p1->x - p2->x;
+    float dy = p1->y - p2->y;
     return sqrt(dx * dx + dy * dy);
 }
 
 float tour_distance(Shape* shapes, SVGPoint* points, int pathCount){
   double total = 0.0;
-  for(int i = 0; i < pathCount; i++){
-    total += svgPointDistance(points[shapes[i].id], points[shapes[i+1].id]);
+  for(int i = 0; i < pathCount - 1; i++){ //pathCount -1?
+    total += svgPointDistance(&points[shapes[i].id], &points[shapes[i+1].id]);
   }
   return total;
 }
@@ -499,6 +484,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   double lastPrintTemp = initialTemp;
   float oldDist, newDist = 0;
   float previousDistance, currentDistance= tour_distance(shapes, points, pathCount);
+
   Shape tempShape;
   printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
     
@@ -519,8 +505,8 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
         pointA = tempInd;
       } 
 
-      oldDist = distance(points, shapes[pointA].id, shapes[pointA+1].id) + distance(points, shapes[pointB].id, shapes[pointB+1].id);
-      newDist = distance(points, shapes[pointA].id, shapes[pointB].id) + distance(points, shapes[pointA+1].id, shapes[pointB+1].id);
+      oldDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistance(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
+      newDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistance(&points[shapes[pointA+1].id], &points[shapes[pointB+1].id]);
 
       //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
       sa_probability = exp((oldDist - newDist) / temp);
@@ -547,7 +533,6 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
         printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
         printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
         printf("  SA_Probability: %f\n", sa_probability);
-        fflush(stdout);
         lastPrintTemp = temp;
 
     }
@@ -556,7 +541,6 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   printf("Un-Scaled Non-Write Travel: %f\n", tour_distance(shapes, points, pathCount));
   printf("Number of swaps %d\n", count_swaps);
   printf("Number of iterations %d\n", count_cycles);
-  fflush(stdout);
 }
 
 
@@ -585,7 +569,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.drawingWidth = width;
   settings.drawingHeight = height;
   printf("DrawingWidth:%f, DrawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-  fflush(stdout);
 
 #ifdef DEBUG_OUTPUT
   printf("Fit To Mat from Config = %i\n", generationConfig[0]);
@@ -1191,7 +1174,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Simulated annealing implementation for path optimization.
   srand(time(0));
 
-  double initialTemp = 10000;
+  double initialTemp = 10000 * log10(pow((sqrt(pointsCount) * sqrt(pathCount) * 1/2), 1.21) + 3163) - 30000;
   float coolingRate = 0.0175;
   int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount*2))*(gcodeState.quality+1);
 
