@@ -135,7 +135,6 @@ typedef struct GCodeState {
     int colorMatch;
     float toolChangePos;
     float tol;
-    int numReord;
     int maxPaths;
     float x;
     float y;
@@ -150,6 +149,7 @@ typedef struct GCodeState {
     float xold;
     float yold;
     float * pathPoints;
+    int colorToFile;
 } GCodeState;
 
 SVGPoint bezPoints[maxBez];
@@ -673,7 +673,6 @@ void printGCodeState(GCodeState* state) {
   printf("colorMatch: %d\n", state->colorMatch);
   printf("toolChangePos: %f\n", state->toolChangePos);
   printf("tol: %f\n", state->tol);
-  printf("numReord: %d\n", state->numReord);
   printf("x: %f\n", state->x);
   printf("y: %f\n", state->y);
   printf("firstx: %f\n", state->firstx);
@@ -709,13 +708,10 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
 
   if(state.quality == 2){
     state.tol = 0.25;
-    state.numReord = 20;
   } else if (state.quality == 1){
     state.tol = 0.5;
-    state.numReord = 10;
   } else {
     state.tol = 1;
-    state.numReord = 10;
   }
 
   state.maxPaths = 0;
@@ -733,6 +729,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.totalDist = 0;
   state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
   state.countIntermediary = 0;
+  state.colorToFile = 0;
 
   return state;
 }
@@ -1090,8 +1087,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     switch(ch) {
     case 'f': gcodeState.feed = atoi(optarg);
       break;
-    case 'n': gcodeState.numReord = atoi(optarg);
-      break;
     case 't': gcodeState.tol = atof(optarg);
       break;
     default:
@@ -1222,8 +1217,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
 
-    //WRITING MOVES FOR DRAWING 
+    //After checking for toolchange. We do a check for color change as well. IF we are breaking by color, a color file pointer will exist, and everytime the color changes, we will close old one, write to disk, open a new one.
+    //The writeShape and writePoint methods will also need to have access to this per color file pointer as well as conditionals to write to it. However, writeToolChange should not need it, hence doing it below the writeToolChange logic. 
 
+    //WRITING MOVES FOR DRAWING 
     writeShape(gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
   }
   
