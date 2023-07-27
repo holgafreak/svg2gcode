@@ -1177,7 +1177,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Simulated annealing implementation for path optimization.
   srand(time(0));
 
-  double initialTemp = 10000 * log10(pow((sqrt(pointsCount) * sqrt(pathCount) * 1/2), 1.21) + 3163) - 30000;
+  double initialTemp = 10000 * log10(pow((sqrt(pointsCount) * sqrt(pathCount) * 1/4), 1.21) + 3163) - 30000;
   float coolingRate = 0.0175;
   int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount*2))*(gcodeState.quality+1);
 
