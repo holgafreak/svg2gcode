@@ -503,7 +503,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   double dist_improvement = 0;
   double dist_avg_improvement = 1;
 
-  while (((dist_avg_improvement < 0) || (dist_it < AVG_OPT_WINDOW)) && ((clock() - opt_start_time) / (double)CLOCKS_PER_SEC < MAX_OPT_SECONDS)) {
+  while (((dist_avg_improvement < -50) || (dist_it < AVG_OPT_WINDOW)) && ((clock() - opt_start_time) / (double)CLOCKS_PER_SEC < MAX_OPT_SECONDS)) {
     current_opt_time = clock();
     elapsed_time = (current_opt_time - opt_start_time) / (double)CLOCKS_PER_SEC;
 
@@ -964,7 +964,12 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       }
 
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
-      fprintf(gcode,"G%d X%.4f Y%.4f F%d\n", firstPoint(sp, ptIndex, pathPointIndex) ? 0 : 1, gcodeState->x, gcodeState->y, (int)feedRate);
+
+      if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
+        fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
+      } else { //if is first point
+        fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+      }    
     }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
