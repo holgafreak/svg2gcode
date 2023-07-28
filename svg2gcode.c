@@ -46,7 +46,7 @@
 #include <math.h>
 
 //#define SA_ANALYSIS
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
