@@ -46,11 +46,14 @@
 #include <math.h>
 
 //#define SA_ANALYSIS
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define maxBez 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
+#define MININT(a,b) (((a)<(b))?(a):(b))
+#define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
+#define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 
 
 #define NANOSVG_IMPLEMENTATION
@@ -482,6 +485,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   int tempInd;
   int sa_probability = 0;
   
+  double elapsed_time = 0;
   double temp = initialTemp;
   double lastPrintTemp = initialTemp;
   float oldDist, newDist = 0;
@@ -489,8 +493,21 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 
   Shape tempShape;
   printf("Un-Optimized/Un-Scaled Non-Write Travel: %f\n", currentDistance);
-    
-  while (temp > 1) {
+  printf("Initial Temp :%f\n", initialTemp);
+
+  clock_t current_opt_time, opt_start_time = clock();
+
+  //Track improvement over last 10 iterations.
+  double dist_imp_tracking[AVG_OPT_WINDOW];
+  int dist_it = 0;
+  double dist_improvement = 0;
+  double dist_avg_improvement = 1;
+
+  while (((dist_avg_improvement < -50) || (dist_it < AVG_OPT_WINDOW)) && ((clock() - opt_start_time) / (double)CLOCKS_PER_SEC < MAX_OPT_SECONDS)) {
+    current_opt_time = clock();
+    elapsed_time = (current_opt_time - opt_start_time) / (double)CLOCKS_PER_SEC;
+
+    dist_avg_improvement = 0;
     previousDistance = currentDistance;
     for(int i = 0; i < numComp; i++) {
       //Based on stipplegen 2-opt heuristic.
@@ -508,11 +525,8 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       } 
 
       oldDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistance(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
-      newDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistance(&points[shapes[pointA+1].id], &points[shapes[pointB+1].id]);
+      newDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistance(&points[shapes[pointB+1].id], &points[shapes[pointA+1].id]);
 
-      //need to siginifcantly adjust the simulated annealing calc because it is too ready to choose the worse option.
-      sa_probability = exp((oldDist - newDist) / temp);
-      //if(newDist < oldDist || sa_probability > randomFloat()) {
       if(newDist < oldDist){
         count_swaps++;
         int indexRight = pointB;  
@@ -528,15 +542,29 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       }
     }
 
+    dist_improvement = currentDistance - previousDistance; //Current distance *should* be smaller than previous distance. So elements in arr will be negative.
+    dist_imp_tracking[dist_it % AVG_OPT_WINDOW] = dist_improvement; //Update array with dist improvement.
+
+    int dist_avg_it = MININT(dist_it++, AVG_OPT_WINDOW); //find number of elements in array, min of dist_it +1 or AVG_OPT_WINDOW
+
+    for(int i = 0; i < dist_avg_it; i++){ //iterate through array and increment the avg accumulator.
+      dist_avg_improvement += dist_imp_tracking[i];
+    }
+    
+    dist_avg_improvement = dist_avg_improvement/dist_avg_it; //divide accumulator by the number of elements.
+
     count_cycles++;
     temp *= 1 - coolingRate;
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
-        printf("InitTemp: %f, NumComp: %i; CoolingRate: %f, Temp: %f\n", initialTemp, numComp, coolingRate, temp);
         printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
-        printf("  SA_Probability: %f\n", sa_probability);
+        printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
+        printf("  Elapsed Time: %f\n", elapsed_time);
         lastPrintTemp = temp;
-
+        fflush(stdout);
+    }
+    if (elapsed_time >= MAX_OPT_SECONDS) {
+        break;
     }
   }
 
@@ -936,7 +964,12 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
       }
 
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
-      fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
+
+      if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
+        fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
+      } else { //if is first point
+        fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+      }    
     }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
@@ -1155,8 +1188,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       return -1;
   }
 
-  printf("Paths %d Points %d\n",pathCount, pointsCount);
-
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
   shapes = (Shape*)malloc(pathCount*sizeof(Shape));
@@ -1177,19 +1208,24 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Simulated annealing implementation for path optimization.
   srand(time(0));
 
-  double initialTemp = 10000 * log10(pow((sqrt(pointsCount) * sqrt(pathCount) * 1/2), 1.21) + 3163) - 30000;
-  float coolingRate = 0.0175;
-  int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount*2))*(gcodeState.quality+1);
+  double initialTempLog = 13000 * log10(pow((sqrt(pointsCount) * sqrt(pathCount) * 1/20), 1.9) + 20000) - 50000;
+  double initialTempExp = 0.03*(pow((sqrt(pointsCount) * sqrt(pathCount)), 1.25) +5000) + 4750;
+  float coolingRate = 0.035;
+  int saNumComp = floor(sqrt(pointsCount)*sqrt(pathCount))*((gcodeState.quality+1)*(gcodeState.quality));
 
   //Simulated Annealing call
   clock_t start_sa, stop_sa;
   double reorder_time;
 
+  printf("Paths %d Points %d\n",pathCount, pointsCount);
   start_sa = clock();
-  simulatedAnnealing(shapes, points, pathCount, initialTemp, coolingRate, gcodeState.quality, saNumComp);
+  simulatedAnnealing(shapes, points, pathCount, initialTempExp, coolingRate, gcodeState.quality, saNumComp);
 
   stop_sa = clock();
   reorder_time = ((double) (stop_sa - start_sa)) / CLOCKS_PER_SEC;
+
+  printf("Finished Path-Opt\n");
+  fflush(stdout);
 
   printf("Sorting shapes by color\n");
   int mergeCount = 0;
