@@ -487,7 +487,7 @@ float distanceLineToPoint(float px, float py, float x1, float y1, float x2, floa
 void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
                     int *bufferIndex, TransformSettings* settings) {
     float dmax = 0;
-    int index = 0;
+    int index = -1;
 
     float x1 = (points[startIndex]) *settings->scale + settings->shiftX;
     float y1 = (points[startIndex + 1]) *settings->scale + settings->shiftY;
@@ -498,7 +498,7 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
         float px = points[i] * settings->scale + settings->shiftX;
         float py = points[i + 1] * settings->scale + settings->shiftY;
         float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
-        if (d > dmax) {
+        if (d >= dmax) {
             index = i;
             dmax = d;
         }
@@ -514,6 +514,7 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
         *bufferIndex += 2;
     }
 }
+
 
 void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
   int count_swaps = 0;
@@ -1076,17 +1077,42 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
     int bufferIndex = 0;
-    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, 1, gcodeState->pathPointsBuf, &bufferIndex, &settings);
+    printf("Starting Douglas Peucker\n");
+    fflush(stdout);
+
+    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, 1, gcodeState->pathPointsBuf, &bufferIndex, settings);
+    // Print out pathPoints before copying
+    printf("Before copying:\n");
+    for(int i = 0; i < pathPointsIndex; i += 2) {
+        printf("x[%d]: %f, y[%d]: %f\n", i, gcodeState->pathPoints[i], i+1, gcodeState->pathPoints[i+1]);
+    }
+    fflush(stdout);
+
+    // Copy the results back to pathPoints
+    memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
+
+    // Print out pathPoints after copying
+    printf("After copying:\n");
+    for(int i = 0; i < bufferIndex; i += 2) {
+        printf("x[%d]: %f, y[%d]: %f\n", i, gcodeState->pathPoints[i], i+1, gcodeState->pathPoints[i+1]);
+    }
+    fflush(stdout);
 
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     if(sp){
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
+        // Print out point before writing
+        printf("Writing point (backward): x[%d]: %f, y[%d]: %f\n", z, gcodeState->pathPoints[z], z+1, gcodeState->pathPoints[z+1]);
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        fflush(stdout);
       }
     } else {
       for(int z = 0; z < pathPointsIndex; z += 2){
+        // Print out point before writing
+        printf("Writing point (forward): x[%d]: %f, y[%d]: %f\n", z, gcodeState->pathPoints[z], z+1, gcodeState->pathPoints[z+1]);
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        fflush(stdout);
       }
     }
 
@@ -1238,6 +1264,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //alloc a worst case array for storing calculated draw points
   //malloc for (maxPathsinShape * maxNumberofPointsperBez * xandy * sizeofInt)
   gcodeState.pathPoints = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
+  gcodeState.pathPointsBuf = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float));
   if (gcodeState.pathPoints == NULL) {
     printf("Memory allocation failed!\n");
     exit(1);
