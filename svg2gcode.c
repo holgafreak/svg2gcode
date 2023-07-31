@@ -45,15 +45,15 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define SA_ANALYSIS
 //#define DEBUG_OUTPUT
 #define BTSVG
-#define maxBez 128 //64;
+#define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
 #define MAXINT(a,b) (((a)>(b))?(a):(b))
 #define MININT(a,b) (((a)<(b))?(a):(b))
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
+#define NUM_TOOLS 6
 
 
 #define NANOSVG_IMPLEMENTATION
@@ -157,7 +157,7 @@ typedef struct GCodeState {
     int colorToFile;
 } GCodeState;
 
-SVGPoint bezPoints[maxBez];
+SVGPoint bezPoints[MAX_BEZ];
 static int bezCount = 0;
 int collinear = 0;
 #ifdef _WIN32
@@ -283,9 +283,9 @@ static void cubicBez(float x1, float y1, float x2, float y2,
     bezPoints[bezCount].x = x4; //number of points in a given curve will be bezCount.
     bezPoints[bezCount].y = y4;
     bezCount++;
-    if(bezCount >= maxBez) {
+    if(bezCount >= MAX_BEZ) {
       printf("!bez count\n");
-      bezCount = maxBez;
+      bezCount = MAX_BEZ;
     }
   }
 }
@@ -854,13 +854,13 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   fprintf(gcode, "( Intermediary Points: %d )\n", gcodeState->countIntermediary);
   fprintf(gcode, "( PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
 #ifdef DEBUG_OUTPUT
-  //fprintf(gcode, " (MaxPaths in a shape: %i)\n", gcodeState->maxPaths);
+  fprintf(gcode, " (MaxPaths in a shape: %i)\n", gcodeState->maxPaths);
 #endif
 }
 
 void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
 #ifdef DEBUG_OUTPUT
-  //fprintf(gcode, "( Machine Type: %i )\n", machineType);
+  fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
@@ -1066,7 +1066,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 
     printf("penColors:\n");
-    for(i = 0; i < 6; i++) {
+    for(i = 0; i < numTools; i++) {
         printf("\t%d: ", i+1);
         for(j = 0; j < penColorCount[i]; j++) {
             printf("%d ", penColors[i][j]);
@@ -1075,7 +1075,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
     }
 
     printf("penColorCount:\n");
-    for(i = 0; i < 6; i++) {
+    for(i = 0; i < numTools; i++) {
         printf("\t%d: %d\n", i, penColorCount[i]);
     }
 
@@ -1199,7 +1199,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   calcPaths(points, toolPaths, &gcodeState, shapes, debug);
   //alloc a worst case array for storing calculated draw points
   //malloc for (maxPathsinShape * maxNumberofPointsperBez * xandy * sizeofInt)
-  gcodeState.pathPoints = malloc(gcodeState.maxPaths * maxBez * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
+  gcodeState.pathPoints = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
   if (gcodeState.pathPoints == NULL) {
     printf("Memory allocation failed!\n");
     exit(1);
