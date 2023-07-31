@@ -154,6 +154,7 @@ typedef struct GCodeState {
     float xold;
     float yold;
     float * pathPoints;
+    float * pathPointsBuf;
     int colorToFile;
 } GCodeState;
 
@@ -478,6 +479,41 @@ float randomFloat() {
   return (float)rand() / (float)RAND_MAX ;
 }
 
+float distanceLineToPoint(float px, float py, float x1, float y1, float x2, float y2) {
+    float result = fabs((y2-y1)*px - (x2-x1)*py + x2*y1 - y2*x1) / sqrt(pow(y2-y1, 2) + pow(x2-x1, 2));
+    return result;
+}
+
+void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
+                    int *bufferIndex, TransformSettings* settings) {
+    float dmax = 0;
+    int index = 0;
+
+    float x1 = (points[startIndex]) *settings->scale + settings->shiftX;
+    float y1 = (points[startIndex + 1]) *settings->scale + settings->shiftY;
+    float x2 = (points[endIndex]) *settings->scale + settings->shiftX;
+    float y2 = (points[endIndex + 1]) *settings->scale + settings->shiftY;
+
+    for(int i = startIndex + 2; i < endIndex; i += 2) {
+        float px = points[i] * settings->scale + settings->shiftX;
+        float py = points[i + 1] * settings->scale + settings->shiftY;
+        float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
+        if (d > dmax) {
+            index = i;
+            dmax = d;
+        }
+    }
+    
+    if(dmax > epsilon) {
+        DouglasPeucker(points, startIndex, index, epsilon, buffer, bufferIndex, settings);
+        DouglasPeucker(points, index, endIndex, epsilon, buffer, bufferIndex, settings);
+    }
+    else {
+        buffer[*bufferIndex] = points[startIndex];
+        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        *bufferIndex += 2;
+    }
+}
 
 void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
   int count_swaps = 0;
@@ -1011,10 +1047,8 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
     return res;
 }
 
-//Now work on refactoring writeShape.
 void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-    int writeShape = 1;
     int j, l; //local iterators with k <= j, l < npaths;
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
@@ -1040,6 +1074,10 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
             break;
         }
     }
+    //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
+    int bufferIndex = 0;
+    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, 1, gcodeState->pathPointsBuf, &bufferIndex, &settings);
+
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     if(sp){
@@ -1184,7 +1222,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
  }
 
   if (setvbuf(gcode, writeBuffer, _IOFBF, BUFFER_SIZE) != 0) {
-      perror("Failed to set buffer");
+      printf("Failed to set buffer\n");
       return -1;
   }
 
@@ -1294,10 +1332,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColorCount[6] = {2, 1, 1, 1, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
-  int penOneColorArr[] = {65280, 16711680}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
-  int penTwoColorArr[] = {1710618};
-  int penThreeColorArr[] = {2763519};
+  int penColorCount[6] = {1, 0, 0, 0, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
+  int penOneColorArr[] = {0}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
+  int penTwoColorArr[] = {-1};
+  int penThreeColorArr[] = {-1};
   int penFourColorArr[] = {-1};
   int penFiveColorArr[] = {-1};
   int penSixColorArr[] = {-1};
