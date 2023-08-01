@@ -54,7 +54,7 @@
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
-#define DOUGLAS_PEUCKER_EPSILON 0.2 //in mm
+#define DOUGLAS_PEUCKER_EPSILON 0.1 //in mm
 
 
 #define NANOSVG_IMPLEMENTATION
@@ -1113,12 +1113,12 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
     int bufferIndex = 0;
     int lastWritten = 0; //need to set a flag to notify if last point has been written.
-    printf("Starting Douglas Peucker\n");
-    fflush(stdout);
+    // printf("Starting Douglas Peucker\n");
+    // fflush(stdout);
 
     //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
     DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
-    printf("BufferIndex: %d, PathPointsIndex: %d\n", bufferIndex, pathPointsIndex);
+    //printf("BufferIndex: %d, PathPointsIndex: %d\n", bufferIndex, pathPointsIndex);
 
     // Copy the results back to pathPoints
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
