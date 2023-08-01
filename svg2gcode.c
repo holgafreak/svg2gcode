@@ -54,7 +54,7 @@
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
-#define DOUGLAS_PEUCKER_EPSILON 0.5 //in mm
+#define DOUGLAS_PEUCKER_EPSILON 0.2 //in mm
 
 
 #define NANOSVG_IMPLEMENTATION
