@@ -54,7 +54,7 @@
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
-#define DOUGLAS_PEUCKER_EPSILON 0.1
+#define DOUGLAS_PEUCKER_EPSILON 0.5 //in mm
 
 
 #define NANOSVG_IMPLEMENTATION
@@ -488,7 +488,7 @@ float distanceLineToPoint(float px, float py, float x1, float y1, float x2, floa
 
 //DouglasPeucker path simplification algorithm.
 void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
-                    int *bufferIndex, int * pathPointsIndex, TransformSettings* settings) {
+                    int *bufferIndex, int * pathPointsIndex, int *lastWritten, TransformSettings* settings) {
     float dmax = 0;
     int index = -1;
 
@@ -512,8 +512,8 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
         }
       }
       //Once we found the furthest away point, call dp recursively.
-      DouglasPeucker(points, startIndex, maxIndex, epsilon, buffer, bufferIndex, pathPointsIndex, settings);
-      DouglasPeucker(points, maxIndex, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, settings);
+      DouglasPeucker(points, startIndex, maxIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+      DouglasPeucker(points, maxIndex, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
       return;
     }
 
@@ -533,18 +533,19 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
     //If the max dist is greater than epsilon, we want to preserve this point, so we can treat it as  the new end/start of
     //the recursive dp call.
     if(dmax > epsilon) {
-        DouglasPeucker(points, startIndex, index, epsilon, buffer, bufferIndex, pathPointsIndex, settings);
-        DouglasPeucker(points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, settings);
+        DouglasPeucker(points, startIndex, index, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        DouglasPeucker(points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
     }
     else {
         buffer[*bufferIndex] = points[startIndex];
         buffer[*bufferIndex + 1] = points[startIndex + 1];
         *bufferIndex += 2;
     }
-    if (endIndex == *pathPointsIndex - 2) {
+    if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
         buffer[*bufferIndex] = points[endIndex];
         buffer[*bufferIndex + 1] = points[endIndex + 1];
         *bufferIndex += 2;
+        *lastWritten = 1;
     }
 }
 
@@ -976,8 +977,8 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     float dist = 0.0;
     
     // Get the unscaled and unrotated coordinates from pathPoints
-    float x = gcodeState->pathPointsBuf[*ptIndex];
-    float y = gcodeState->pathPointsBuf[(*ptIndex)+1];
+    float x = gcodeState->pathPoints[*ptIndex];
+    float y = gcodeState->pathPoints[(*ptIndex)+1];
     
     // Scale and shift the coordinates
     float scaledX = x*settings->scale + settings->shiftX;
@@ -1053,10 +1054,10 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
     int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
     float rx1, rx2, ry1, ry2;
-    float x1 = (gcodeState->pathPointsBuf[0]) *settings->scale + settings->shiftX;
-    float y1 = (gcodeState->pathPointsBuf[1]) *settings->scale + settings->shiftY;;
-    float x2 = (gcodeState->pathPointsBuf[pathPointsIndex-2]) *settings->scale + settings->shiftX;
-    float y2 = (gcodeState->pathPointsBuf[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
+    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
+    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
+    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
 
     if(settings->svgRotation > 0) {
         rx1 = rotateX(settings, x1, y1);
@@ -1111,17 +1112,17 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     }
     //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
     int bufferIndex = 0;
+    int lastWritten = 0; //need to set a flag to notify if last point has been written.
     printf("Starting Douglas Peucker\n");
     fflush(stdout);
 
     //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
-    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, settings);
+    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
     printf("BufferIndex: %d, PathPointsIndex: %d\n", bufferIndex, pathPointsIndex);
-    bufferIndex+2;
 
     // Copy the results back to pathPoints
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
-    pathPointsIndex = bufferIndex;
+    pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
