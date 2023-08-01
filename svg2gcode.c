@@ -54,6 +54,7 @@
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
+#define DOUGLAS_PEUCKER_EPSILON 0.1 //in mm
 
 
 #define NANOSVG_IMPLEMENTATION
@@ -154,6 +155,7 @@ typedef struct GCodeState {
     float xold;
     float yold;
     float * pathPoints;
+    float * pathPointsBuf;
     int colorToFile;
 } GCodeState;
 
@@ -478,7 +480,77 @@ float randomFloat() {
   return (float)rand() / (float)RAND_MAX ;
 }
 
+//Calculate and return the perpendicular distance from a line drawn between (x1, y1) and (x2, y2) and the point (px, py)
+float distanceLineToPoint(float px, float py, float x1, float y1, float x2, float y2) {
+    float result = fabs((y2-y1)*px - (x2-x1)*py + x2*y1 - y2*x1) / sqrt(pow(y2-y1, 2) + pow(x2-x1, 2));
+    return result;
+}
 
+//DouglasPeucker path simplification algorithm.
+void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
+                    int *bufferIndex, int * pathPointsIndex, int *lastWritten, TransformSettings* settings) {
+    float dmax = 0;
+    int index = -1;
+
+    //First and last point in divided segment.
+    float x1 = (points[startIndex]) *settings->scale;
+    float y1 = (points[startIndex + 1]) *settings->scale;
+    float x2 = (points[endIndex]) *settings->scale;
+    float y2 = (points[endIndex + 1]) *settings->scale;
+
+    //if start and end of shape are in same location.
+    if(x1 == x2 && y1 == y2){
+      float maxDist = 0;
+      float maxIndex = -1;
+      for(int i = startIndex + 2; i < endIndex - 2; i += 2){
+        float checkX = points[i] *settings->scale;
+        float checkY = points[i+1] * settings->scale;
+        float dist = distanceBetweenPoints(x1, y1, checkX, checkY);
+        if(dist > maxDist){
+          maxDist = dist;
+          maxIndex = i;
+        }
+      }
+      //Once we found the furthest away point, call dp recursively.
+      DouglasPeucker(points, startIndex, maxIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+      DouglasPeucker(points, maxIndex, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+      return;
+    }
+
+    //Iterate from first point after start, to last point before end. Find the x and y value.
+    //Get the perpendicular distance to pN from line between pStart pEnd.
+    //Find the maximum index of such point and track the value.
+    for(int i = startIndex + 2; i < endIndex; i += 2) {
+        float px = points[i] * settings->scale;
+        float py = points[i + 1] * settings->scale;
+        float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
+        if (d >= dmax) {
+            index = i;
+            dmax = d;
+        }
+    }
+    
+    //If the max dist is greater than epsilon, we want to preserve this point, so we can treat it as  the new end/start of
+    //the recursive dp call.
+    if(dmax > epsilon) {
+        DouglasPeucker(points, startIndex, index, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        DouglasPeucker(points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+    }
+    else {
+        buffer[*bufferIndex] = points[startIndex];
+        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        *bufferIndex += 2;
+    }
+    if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
+        buffer[*bufferIndex] = points[endIndex];
+        buffer[*bufferIndex + 1] = points[endIndex + 1];
+        *bufferIndex += 2;
+        *lastWritten = 1;
+    }
+}
+
+//Shape level path optimization algorithm. Check swaps, swap if better distance, repeat.
+//Iterates until avg rate of improvement over AVG_OPT_WINDOW iterations is below some threshold.
 void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double initialTemp, float coolingRate, int quality, int numComp) { //simulated annealing implementation for no test output.
   int count_swaps = 0;
   int count_cycles = 0;
@@ -1011,10 +1083,8 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
     return res;
 }
 
-//Now work on refactoring writeShape.
 void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
-    int writeShape = 1;
     int j, l; //local iterators with k <= j, l < npaths;
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
@@ -1040,14 +1110,33 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
             break;
         }
     }
+    //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
+    int bufferIndex = 0;
+    int lastWritten = 0; //need to set a flag to notify if last point has been written.
+    // printf("Starting Douglas Peucker\n");
+    // fflush(stdout);
+
+    //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
+    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
+    //printf("BufferIndex: %d, PathPointsIndex: %d\n", bufferIndex, pathPointsIndex);
+
+    // Copy the results back to pathPoints
+    memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
+    pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
+
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
+#ifdef DEBUG_OUTPUT
+    sp = 0;
+#endif
     if(sp){
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
+        // Print out point before writing
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
     } else {
       for(int z = 0; z < pathPointsIndex; z += 2){
+        // Print out point before writing
         writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
     }
@@ -1184,7 +1273,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
  }
 
   if (setvbuf(gcode, writeBuffer, _IOFBF, BUFFER_SIZE) != 0) {
-      perror("Failed to set buffer");
+      printf("Failed to set buffer\n");
       return -1;
   }
 
@@ -1200,6 +1289,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //alloc a worst case array for storing calculated draw points
   //malloc for (maxPathsinShape * maxNumberofPointsperBez * xandy * sizeofInt)
   gcodeState.pathPoints = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float)); //points are stored as x on even y on odd, eg point p1 = (pathPoints[0],pathPoints[1]) = (x1,y1)
+  gcodeState.pathPointsBuf = malloc(gcodeState.maxPaths * MAX_BEZ * 2 * sizeof(float));
   if (gcodeState.pathPoints == NULL) {
     printf("Memory allocation failed!\n");
     exit(1);
@@ -1294,10 +1384,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #ifndef BTSVG
 int main(int argc, char* argv[]){
   printf("Argc:%d\n", argc);
-  int penColorCount[6] = {2, 1, 1, 1, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
-  int penOneColorArr[] = {65280, 16711680}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
-  int penTwoColorArr[] = {1710618};
-  int penThreeColorArr[] = {2763519};
+  int penColorCount[6] = {1, 0, 0, 0, 0, 0}; //count of colors per pen needs to be passed into generateGcode. penColorCount[i] corresponds to pen tool i-1.
+  int penOneColorArr[] = {0}; //Integer values of colors for each pen. -1 in an arr is placeholder for no colors to this arr.
+  int penTwoColorArr[] = {-1};
+  int penThreeColorArr[] = {-1};
   int penFourColorArr[] = {-1};
   int penFiveColorArr[] = {-1};
   int penSixColorArr[] = {-1};
