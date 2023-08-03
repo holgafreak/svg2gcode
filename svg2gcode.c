@@ -953,8 +953,6 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 #endif
     }
   }
-
-  gcodeState->currColor = shapes[*i].stroke; //always want to update currColor.
 }
 
 
@@ -1254,7 +1252,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[9]) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[9], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1429,12 +1427,17 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
         char filename[256];
 
         int len = strlen(argv[optind + 1]);
-        char fileStart[len - 5];
+        char fileStart[len - 5]; //This will also be the folder.
         strncpy(fileStart, argv[optind + 1], len - 6);
         fileStart[len - 6] = '\0';
+
+        int nameLen = strlen(fileName);
+        char colFileName[nameLen-5];
+        strncpy(colFileName, fileName, nameLen-6);
+        colFileName[nameLen-6] = '\0';
         
         char *fileEnd = ".gcode";
-        sprintf(filename, "%s-%s%s", fileStart, uint_to_hex_string(shapes[i].stroke), fileEnd);
+        sprintf(filename, "%s/%s-%s%s", fileStart, colFileName, uint_to_hex_string(shapes[i].stroke), fileEnd);
         printf("File name to open: %s\n", filename);
         fflush(stdout);
 
@@ -1452,6 +1455,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
         printf("Finish writing header to color file\n");
         fflush(stdout);
       }
+      gcodeState.currColor = shapes[i].stroke; //always want to update currColor.
     }
     
 
