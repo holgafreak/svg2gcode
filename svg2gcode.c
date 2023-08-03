@@ -156,7 +156,9 @@ typedef struct GCodeState {
     float yold;
     float * pathPoints;
     float * pathPointsBuf;
+    int pathPointsBufIndex;
     int colorToFile;
+    int colorFileOpen;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -804,7 +806,7 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.zFloor = paperDimensions[4];
   state.ztraverse = paperDimensions[5];
   state.xy = 1;
-  state.currColor = 0;
+  state.currColor = -1;
   state.targetColor = 0;
   state.targetTool = 0;
   state.currTool = -1;
@@ -834,7 +836,9 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.totalDist = 0;
   state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
   state.countIntermediary = 0;
-  state.colorToFile = 0;
+  state.colorToFile = 1;
+  state.colorFileOpen = 0;
+  state.pathPointsBufIndex = 0;
 
   return state;
 }
@@ -847,7 +851,57 @@ void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
   fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
 }
 
-void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape * shapes, int * i) {
+char* uint_to_hex_string(unsigned int num) {
+    // Determine the number of characters required for the hex representation
+    unsigned int temp = num;
+    int num_chars = 0;
+    do {
+        temp >>= 4; // Right-shift by 4 bits (equivalent to division by 16)
+        num_chars++;
+    } while (temp != 0);
+
+    // Allocate memory for the string representation (+1 for null terminator)
+    char* result = (char*)malloc((num_chars + 1) * sizeof(char));
+
+    // Convert to hex characters and store them in the buffer (in reverse order)
+    int index = num_chars - 1;
+    do {
+        int hex_digit = num & 0xF; // Mask the lowest 4 bits to get the hex digit
+        result[index] = (hex_digit < 10) ? ('0' + hex_digit) : ('A' + hex_digit - 10);
+        num >>= 4; // Right-shift by 4 bits to move to the next hex digit
+        index--;
+    } while (num != 0);
+
+    // Add null terminator at the end of the string
+    result[num_chars] = '\0';
+
+    return result;
+}
+
+void colorToFileManager(GCodeState* gcodeState, char** argv, int machineType, FILE* color_gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int* i) {
+  if(gcodeState->targetColor != shapes[*i].stroke){ //If we are writing a new color starting now, Begin new color file process.
+    //Want to handle the case where a color file is already open. Need to close the file.
+    if(gcodeState->colorFileOpen == 1){
+      fclose(color_gcode);
+      gcodeState->colorFileOpen = 0;
+    }
+
+    char filename[256];
+    sprintf(filename, "%s%s", argv[optind + 1], uint_to_hex_string(shapes[*i].stroke));
+    printf("File name to open: %s\n", filename);
+    fflush(stdout);
+
+    color_gcode = fopen(filename, "w");
+    if(color_gcode == NULL){
+      printf("Failed to open color file: %s\n", filename);
+      fflush(stdout);
+      return;
+    }
+    gcodeState->colorFileOpen = 1;
+  }
+}
+
+void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
     if(colorInPen(penList[gcodeState->currTool], shapes[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new shape's color is assigned to current tool
@@ -972,7 +1026,7 @@ int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcod
   return (!firstPoint(sp, ptIndex, pathPointIndex)) && (gcodeState->trackedDist + *dist > gcodeState->brushDist);
 }
 
-void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
+void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
     float rotatedX, rotatedY, feedRate;
     float dist = 0.0;
     
@@ -1039,17 +1093,30 @@ void writePoint(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
 
       if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
         fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
+        if(gcodeState->colorToFile && gcodeState->colorFileOpen){
+          printf("Writing point to color_gcode\n");
+          fflush(stdout);
+          fprintf(color_gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
+        }
       } else { //if is first point
         fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+        if(gcodeState->colorToFile && gcodeState->colorFileOpen){
+          printf("Writing point to color_gcode\n");
+          fflush(stdout);
+          fprintf(color_gcode, "G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
+        }
       }    
-    }
+  }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
       gcodeState->firstx = rotatedX;
       gcodeState->firsty = rotatedY;
       toolDown(gcode, gcodeState, machineType);
+      if(gcodeState->colorToFile && gcodeState->colorFileOpen){
+        toolDown(color_gcode, gcodeState, machineType);
+      }
     }
-}
+  }
 
 int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
     int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
@@ -1083,7 +1150,7 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
     return res;
 }
 
-void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
+void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
     
@@ -1132,16 +1199,19 @@ void writeShape(FILE * gcode, GCodeState * gcodeState, TransformSettings * setti
     if(sp){
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
-        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
     } else {
       for(int z = 0; z < pathPointsIndex; z += 2){
         // Print out point before writing
-        writePoint(gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
       }
     }
 
     toolUp(gcode, gcodeState, machineTypePtr);
+    if(gcodeState->colorFileOpen && gcodeState->colorToFile){
+      toolUp(color_gcode, gcodeState, machineTypePtr);
+    }
 }
 
 void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
@@ -1207,6 +1277,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
  
   FILE *gcode;
   FILE *debug;
+  FILE *color_gcode;
 
   //CLI argument BS may want to remove.
   printf("Argc:%d\n", argc);
@@ -1348,14 +1419,47 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[i].id, i, shapes[i].stroke);
 #endif
+    
+    //Handling for color file pointer at start of new file. May want to refactor this.
+    if(gcodeState.colorToFile){
+      if(gcodeState.targetColor != shapes[i].stroke){ //If we are writing a new color starting now, Begin new color file process.
+      //Want to handle the case where a color file is already open. Need to close the file.
+        if(gcodeState.colorFileOpen == 1){
+          fclose(color_gcode);
+          gcodeState.colorFileOpen = 0;
+        }
+
+        char filename[256];
+        sprintf(filename, "%s%s", argv[optind + 1], uint_to_hex_string(shapes[i].stroke));
+        printf("File name to open: %s\n", filename);
+        fflush(stdout);
+
+        color_gcode = fopen(filename, "w");
+        if(color_gcode == NULL){
+          printf("Failed to open color file: %s\n", filename);
+          fflush(stdout);
+          return -1;
+        }
+
+        gcodeState.colorFileOpen = 1;
+      }
+    }
+    
+
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
 
-    //After checking for toolchange. We do a check for color change as well. IF we are breaking by color, a color file pointer will exist, and everytime the color changes, we will close old one, write to disk, open a new one.
-    //The writeShape and writePoint methods will also need to have access to this per color file pointer as well as conditionals to write to it. However, writeToolChange should not need it, hence doing it below the writeToolChange logic. 
+    //write color file header?
+    if(gcodeState.colorToFile && gcodeState.colorFileOpen){
+      printf("Writing header to color file\n");
+      fflush(stdout);
+      writeHeader(&gcodeState, color_gcode, machineType, paperDimensions);
+      printf("Finish writing header to color file\n");
+      fflush(stdout);
+    }
 
     //WRITING MOVES FOR DRAWING 
-    writeShape(gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
+    writeShape(gcode, color_gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
   }
   
   writeFooter(&gcodeState, gcode, machineType);
