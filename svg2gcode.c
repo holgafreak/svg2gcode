@@ -599,6 +599,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
         pointA = tempInd;
       } 
 
+      //update old dist and new dist based on nearest end/start point of shape we are swapping to. Need to have points track endpoints as well.
       oldDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistance(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
       newDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistance(&points[shapes[pointB+1].id], &points[shapes[pointA+1].id]);
 
