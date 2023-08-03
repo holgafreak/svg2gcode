@@ -1096,15 +1096,11 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
       if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
         fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
-          printf("Writing point to color_gcode\n");
-          fflush(stdout);
           fprintf(color_gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         }
       } else { //if is first point
         fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
-          printf("Writing point to color_gcode\n");
-          fflush(stdout);
           fprintf(color_gcode, "G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         }
       }    
@@ -1186,6 +1182,8 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
     DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
+    //track number of culled points.
+    gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*.5;
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
     char isClosed = toolPaths[j].closed;
@@ -1420,7 +1418,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
     
     //Handling for color file pointer at start of new file. May want to refactor this.
     if(gcodeState.colorToFile){ //If we are writing colors to files.
-      printf("GcodeState.CurrColor: %d, shapes[i].stroke: %d\n", gcodeState.currColor, shapes[i].stroke);
       if(gcodeState.currColor != shapes[i].stroke){ //If current color is not the new shapes color. Currently, currColor is not being set properly.
         if(gcodeState.colorFileOpen == 1){ //If there is already a color file open.
           writeFooter(&gcodeState, color_gcode, machineType);
