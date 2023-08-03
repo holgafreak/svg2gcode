@@ -1423,6 +1423,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       printf("GcodeState.CurrColor: %d, shapes[i].stroke: %d\n", gcodeState.currColor, shapes[i].stroke);
       if(gcodeState.currColor != shapes[i].stroke){ //If current color is not the new shapes color. Currently, currColor is not being set properly.
         if(gcodeState.colorFileOpen == 1){ //If there is already a color file open.
+          writeFooter(&gcodeState, color_gcode, machineType);
+
           fclose(color_gcode);
           gcodeState.colorFileOpen = 0;
         }
@@ -1464,6 +1466,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
   
   writeFooter(&gcodeState, gcode, machineType);
+  writeFooter(&gcodeState, color_gcode, machineType);
   stop_write = clock();
   write_time = ((double) stop_write - start_write) / CLOCKS_PER_SEC;
 
@@ -1475,6 +1478,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   fflush(stdout);
   fclose(gcode);
+  fclose(color_gcode);
   free(gcodeState.pathPoints);
   free(writeBuffer);
   free(points);
