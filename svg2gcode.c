@@ -946,13 +946,15 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       }
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
-      gcodeState->currColor = gcodeState->targetColor;
+      //
       gcodeState->currTool = gcodeState->targetTool;
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
     }
   }
+
+  gcodeState->currColor = shapes[*i].stroke; //always want to update currColor.
 }
 
 
@@ -1177,17 +1179,12 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
             break;
         }
     }
-    //at this point, all points have been written into gcodeState->pathPoints. We can perform optimizations here.
+
     int bufferIndex = 0;
-    int lastWritten = 0; //need to set a flag to notify if last point has been written.
-    // printf("Starting Douglas Peucker\n");
-    // fflush(stdout);
+    int lastWritten = 0;
 
     //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
     DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
-    //printf("BufferIndex: %d, PathPointsIndex: %d\n", bufferIndex, pathPointsIndex);
-
-    // Copy the results back to pathPoints
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
@@ -1248,6 +1245,7 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
         printf("\t%d: %d\n", i, generationConfig[i]);
     }
 }
+
 
 int compareShapes(const void* a, const void* b) {
     Shape* shapeA = (Shape*) a;
@@ -1421,16 +1419,23 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 #endif
     
     //Handling for color file pointer at start of new file. May want to refactor this.
-    if(gcodeState.colorToFile){
-      if(gcodeState.targetColor != shapes[i].stroke){ //If we are writing a new color starting now, Begin new color file process.
-      //Want to handle the case where a color file is already open. Need to close the file.
-        if(gcodeState.colorFileOpen == 1){
+    if(gcodeState.colorToFile){ //If we are writing colors to files.
+      printf("GcodeState.CurrColor: %d, shapes[i].stroke: %d\n", gcodeState.currColor, shapes[i].stroke);
+      if(gcodeState.currColor != shapes[i].stroke){ //If current color is not the new shapes color. Currently, currColor is not being set properly.
+        if(gcodeState.colorFileOpen == 1){ //If there is already a color file open.
           fclose(color_gcode);
           gcodeState.colorFileOpen = 0;
         }
 
         char filename[256];
-        sprintf(filename, "%s%s", uint_to_hex_string(shapes[i].stroke), argv[optind + 1]);
+
+        int len = strlen(argv[optind + 1]);
+        char fileStart[len - 5];
+        strncpy(fileStart, argv[optind + 1], len - 6);
+        fileStart[len - 6] = '\0';
+        
+        char *fileEnd = ".gcode";
+        sprintf(filename, "%s%s%s", fileStart, uint_to_hex_string(shapes[i].stroke), fileEnd);
         printf("File name to open: %s\n", filename);
         fflush(stdout);
 
@@ -1438,25 +1443,21 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
         if(color_gcode == NULL){
           printf("Failed to open color file: %s\n", filename);
           fflush(stdout);
-          return -1;
         }
 
         gcodeState.colorFileOpen = 1;
+
+        printf("Writing header to color file\n");
+        fflush(stdout);
+        writeHeader(&gcodeState, color_gcode, machineType, paperDimensions);
+        printf("Finish writing header to color file\n");
+        fflush(stdout);
       }
     }
     
 
     //Method for writing toolchanges. Checks for toolchange, and writes if neccesary.
     writeToolchange(&gcodeState, machineType, gcode, numTools, penList, penColorCount, shapes, &i);
-
-    //write color file header?
-    if(gcodeState.colorToFile && gcodeState.colorFileOpen){
-      printf("Writing header to color file\n");
-      fflush(stdout);
-      writeHeader(&gcodeState, color_gcode, machineType, paperDimensions);
-      printf("Finish writing header to color file\n");
-      fflush(stdout);
-    }
 
     //WRITING MOVES FOR DRAWING 
     writeShape(gcode, color_gcode, &gcodeState, &settings, shapes, toolPaths, &machineType, &k, &i);
