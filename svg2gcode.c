@@ -159,6 +159,7 @@ typedef struct GCodeState {
     int pathPointsBufIndex;
     int colorToFile;
     int colorFileOpen;
+    int colorCount;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -787,10 +788,12 @@ void printGCodeState(GCodeState* state) {
   printf("totalDist: %lf\n", state->totalDist);
   printf("xold: %f\n", state->xold);
   printf("yold: %f\n", state->yold);
+  printf("colorCount: %d\n", state->colorCount);
+  printf("colorToFile: %d\n", state->colorToFile);
   printf("\n");  // End with newline
 }
 
-GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig){
+GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, int* penColorCount){
   GCodeState state;
   
   state.quality = generationConfig[8];
@@ -837,8 +840,13 @@ GCodeState initializeGCodeState(float * paperDimensions, int * generationConfig)
   state.brushDist = 1000000; //for testing right now. 1,000,000 = 1km should be around normal for a bp pen.
   state.countIntermediary = 0;
   state.colorToFile = 1;
-  state.colorFileOpen = 0;
   state.pathPointsBufIndex = 0;
+
+  for(int i = 0; i < 6; i++){
+    state.colorCount += penColorCount[i];
+  }
+
+  state.colorToFile = (state.colorCount > 1) && generationConfig[9];
 
   return state;
 }
@@ -876,29 +884,6 @@ char* uint_to_hex_string(unsigned int num) {
     result[num_chars] = '\0';
 
     return result;
-}
-
-void colorToFileManager(GCodeState* gcodeState, char** argv, int machineType, FILE* color_gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int* i) {
-  if(gcodeState->targetColor != shapes[*i].stroke){ //If we are writing a new color starting now, Begin new color file process.
-    //Want to handle the case where a color file is already open. Need to close the file.
-    if(gcodeState->colorFileOpen == 1){
-      fclose(color_gcode);
-      gcodeState->colorFileOpen = 0;
-    }
-
-    char filename[256];
-    sprintf(filename, "%s%s", argv[optind + 1], uint_to_hex_string(shapes[*i].stroke));
-    printf("File name to open: %s\n", filename);
-    fflush(stdout);
-
-    color_gcode = fopen(filename, "w");
-    if(color_gcode == NULL){
-      printf("Failed to open color file: %s\n", filename);
-      fflush(stdout);
-      return;
-    }
-    gcodeState->colorFileOpen = 1;
-  }
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
@@ -1252,7 +1237,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[9], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[10], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1263,7 +1248,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   Shape *shapes; //Corresponds to an NSVGPath
   //all 6 tools will have their color assigned manually. If a path has a color not set in p1-6, assign to p1 by default.
   Pen *penList; //counts each color occurrence + the int assigned. (currently, assign any unknown/unsupported to p1. sum of set of pX should == nPaths;)
-  GCodeState gcodeState = initializeGCodeState(paperDimensions, generationConfig);
+  GCodeState gcodeState = initializeGCodeState(paperDimensions, generationConfig, penColorCount);
   printGCodeState(&gcodeState);
 
   int machineType = generationConfig[3]; //machineType
@@ -1467,7 +1452,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   }
   
   writeFooter(&gcodeState, gcode, machineType);
-  writeFooter(&gcodeState, color_gcode, machineType);
+  if(gcodeState.colorToFile){
+    writeFooter(&gcodeState, color_gcode, machineType);
+    fclose(color_gcode);
+  }
+  
   stop_write = clock();
   write_time = ((double) stop_write - start_write) / CLOCKS_PER_SEC;
 
@@ -1479,7 +1468,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   fflush(stdout);
   fclose(gcode);
-  fclose(color_gcode);
   free(gcodeState.pathPoints);
   free(writeBuffer);
   free(points);
