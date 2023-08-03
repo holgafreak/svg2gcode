@@ -1437,7 +1437,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
         fileStart[len - 6] = '\0';
         
         char *fileEnd = ".gcode";
-        sprintf(filename, "%s%s%s", fileStart, uint_to_hex_string(shapes[i].stroke), fileEnd);
+        sprintf(filename, "%s-%s%s", fileStart, uint_to_hex_string(shapes[i].stroke), fileEnd);
         printf("File name to open: %s\n", filename);
         fflush(stdout);
 
