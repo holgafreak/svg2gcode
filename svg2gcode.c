@@ -75,6 +75,8 @@ int pointCountOut = 0;
 typedef struct {
   float x;
   float y;
+  float xn;
+  float yn;
 } SVGPoint;
 
 typedef struct {
@@ -313,10 +315,10 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
   p = 0;
   int shapeCount = 0;
   for (shape = g_image->shapes; shape != NULL; shape = shape->next) {
-    for (path = shape->paths; path != NULL; path = path->next) {
+    for (path = shape->paths; path != NULL; path = path->next) { //For each path in shape.
       shapes[i].id = i;
       shapes[i].stroke = shape->stroke.color;
-      for (j = 0; j < path->npts - 1; j += 3) {
+      for (j = 0; j < path->npts - 1; j += 3) { //iterates through all the paths in a single shape.
         float* pp = &path->pts[j * 2];
         if (j == 0) {
             points[i].x = pp[0];
@@ -326,12 +328,14 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
         for (b = 0; b < 8; b++) {
           paths[k].points[b] = pp[b];
         }
+        points[i].xn = pp[6]; //Set last point in svg point to final point iterated thru by previous loop.
+        points[i].yn = pp[7];
         paths[k].closed = path->closed;
         paths[k].shape = i;
         shapes[i].numToolpaths++;
         k++;
       }
-      cont:
+      
       if (k > pointsCount) {
         printf("Error: k > pointsCount\n");
         state->npaths = 0;
@@ -471,6 +475,17 @@ float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
     return sqrt(dx * dx + dy * dy);
 }
 
+float svgPointDistanceSA(SVGPoint * p1, SVGPoint * p2) {
+    float midx1 = (p1->x + p1->xn) / 2;
+    float midy1 = (p1->y + p1->yn) / 2;
+    float midx2 = (p2->x + p2->xn) / 2;
+    float midy2 = (p2->y + p2->yn) / 2;
+
+    float dx = midx1 - midx2;
+    float dy = midy1 - midy2;
+    return sqrt(dx * dx + dy * dy);
+}
+
 float tour_distance(Shape* shapes, SVGPoint* points, int pathCount){
   double total = 0.0;
   for(int i = 0; i < pathCount - 1; i++){ //pathCount -1?
@@ -490,21 +505,22 @@ float distanceLineToPoint(float px, float py, float x1, float y1, float x2, floa
 }
 
 //DouglasPeucker path simplification algorithm.
-void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
+void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, float epsilon, float *buffer, 
                     int *bufferIndex, int * pathPointsIndex, int *lastWritten, TransformSettings* settings) {
     float dmax = 0;
     int index = -1;
 
     //First and last point in divided segment.
-    float x1 = (points[startIndex]) *settings->scale;
-    float y1 = (points[startIndex + 1]) *settings->scale;
-    float x2 = (points[endIndex]) *settings->scale;
-    float y2 = (points[endIndex + 1]) *settings->scale;
+    float x1 = (points[startIndex]) * (settings->scale);
+    float y1 = (points[startIndex + 1]) * (settings->scale);
+    float x2 = (points[endIndex]) * (settings->scale);
+    float y2 = (points[endIndex + 1]) * (settings->scale);
 
-    //if start and end of shape are in same location.
-    if(x1 == x2 && y1 == y2){
+    //if start and end of shape are in same location, handle this special case.
+    if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
+      fprintf(gcode, "( Same start and end point )\n");
       float maxDist = 0;
-      float maxIndex = -1;
+      int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
         float checkX = points[i] *settings->scale;
         float checkY = points[i+1] * settings->scale;
@@ -514,10 +530,21 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
           maxIndex = i;
         }
       }
+      if(maxIndex == -1) {
+#ifdef DEBUG_OUTPUT
+        fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
+#endif
+        buffer[*bufferIndex] = points[startIndex];
+        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        *bufferIndex += 2;
+        return;
+      } else {
+        DouglasPeucker(gcode, points, startIndex, maxIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        DouglasPeucker(gcode, points, maxIndex, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        return;
+      }
       //Once we found the furthest away point, call dp recursively.
-      DouglasPeucker(points, startIndex, maxIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
-      DouglasPeucker(points, maxIndex, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
-      return;
+      
     }
 
     //Iterate from first point after start, to last point before end. Find the x and y value.
@@ -536,15 +563,21 @@ void DouglasPeucker(float *points, int startIndex, int endIndex, float epsilon, 
     //If the max dist is greater than epsilon, we want to preserve this point, so we can treat it as  the new end/start of
     //the recursive dp call.
     if(dmax > epsilon) {
-        DouglasPeucker(points, startIndex, index, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
-        DouglasPeucker(points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        DouglasPeucker(gcode, points, startIndex, index, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
+        DouglasPeucker(gcode, points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
     }
     else {
+#ifdef DEBUG_OUTPUT
+        fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
+#endif
         buffer[*bufferIndex] = points[startIndex];
         buffer[*bufferIndex + 1] = points[startIndex + 1];
         *bufferIndex += 2;
     }
     if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
+#ifdef DEBUG_OUTPUT
+        fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[endIndex], points[endIndex + 1]);
+#endif
         buffer[*bufferIndex] = points[endIndex];
         buffer[*bufferIndex + 1] = points[endIndex + 1];
         *bufferIndex += 2;
@@ -599,8 +632,9 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
         pointA = tempInd;
       } 
 
-      oldDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistance(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
-      newDist = svgPointDistance(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistance(&points[shapes[pointB+1].id], &points[shapes[pointA+1].id]);
+      //update old dist and new dist based on nearest end/start point of shape we are swapping to. Need to have points track endpoints as well.
+      oldDist = svgPointDistanceSA(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistanceSA(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
+      newDist = svgPointDistanceSA(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistanceSA(&points[shapes[pointB+1].id], &points[shapes[pointA+1].id]);
 
       if(newDist < oldDist){
         count_swaps++;
@@ -993,18 +1027,14 @@ int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current
 
 int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode){ //always want to write if it is first or last point in a shape.
   //want a preliminary check that the coordinates are within bounds.
-  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop))){
+  if ((*px < settings->xMarginLeft || *px > settings->drawSpaceWidth + settings->xMarginRight) || (*py > settings->yMarginTop || *py < -1*(settings->drawSpaceHeight + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     return 1;
   } 
   //return 1 if the distance is greater than the precision value and if it is a new point.
-  if((distanceBetweenPoints(gcodeState->xold, gcodeState->yold, *px, *py) >= gcodeState->precision) && ((gcodeState->xold != *px) || (gcodeState->yold != *py))){ //can write
-    return 1;
-  }
-  gcodeState->pointsCulledPrec++;
-  return 0;
+  return 1;
 }
 
 int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcodeState, int * dist){
@@ -1077,17 +1107,23 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
 
       if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
+#ifdef DEBUG_OUTPUT
+        //fprintf(gcode, "( Writing point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
+#endif
         fprintf(gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
           fprintf(color_gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         }
       } else { //if is first point
+#ifdef DEBUG_OUTPUT
+        //fprintf(gcode, "( Writing first point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
+#endif
         fprintf(gcode,"G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         if(gcodeState->colorToFile && gcodeState->colorFileOpen){
           fprintf(color_gcode, "G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         }
       }    
-  }
+    }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
       gcodeState->firstx = rotatedX;
@@ -1162,12 +1198,26 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     int bufferIndex = 0;
     int lastWritten = 0;
 
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Points before DouglasPeucker algorithm: )\n");
+    for(int z = 0; z < pathPointsIndex; z += 2) {
+        fprintf(gcode, "( X: %.4f, Y: %.4f )\n", gcodeState->pathPoints[z], gcodeState->pathPoints[z + 1]);
+    }
+#endif
+
     //Optimize points into gcodeState->pathPointsBuf. Write points from pathPointsBuf, not pathPoints.
-    DouglasPeucker(gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
+    DouglasPeucker(gcode, gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
     //track number of culled points.
     gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*.5;
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
+
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Points after DouglasPeucker algorithm: )\n");
+    for(int z = 0; z < pathPointsIndex; z += 2) {
+        fprintf(gcode, "( X: %.4f, Y: %.4f )\n", gcodeState->pathPoints[z], gcodeState->pathPoints[z + 1]);
+    }
+#endif
 
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
