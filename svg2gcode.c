@@ -518,7 +518,9 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 
     //if start and end of shape are in same location, handle this special case.
     if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
+#ifdef DEBUG_OUTPUT
       fprintf(gcode, "( Same start and end point )\n");
+#endif
       float maxDist = 0;
       int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
@@ -1332,7 +1334,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind],"px", 128);
+  g_image = nsvgParseFromFile(argv[optind],"mm", 25.4);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
