@@ -77,7 +77,6 @@ typedef struct {
   float y;
   float xn;
   float yn;
-  int fromStart; // == 1 if the point is tracked traveled to from the first point of previous shape.
 } SVGPoint;
 
 typedef struct {
@@ -331,7 +330,6 @@ static void calcPaths(SVGPoint* points, ToolPath* paths, GCodeState * state, Sha
         }
         points[i].xn = pp[6]; //Set last point in svg point to final point iterated thru by previous loop.
         points[i].yn = pp[7];
-        points[i].fromStart = 1;
         paths[k].closed = path->closed;
         paths[k].shape = i;
         shapes[i].numToolpaths++;
@@ -471,15 +469,20 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   printf("shapeCount = %d\n",shapeCount);
 }
 
-float svgPointDistanceSA(float x1, float y1, float x2, float y2) {
-    float dx = x1 - x2;
-    float dy = y1 - y2;
-    return sqrt(dx * dx + dy * dy);
-}
-
 float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
     float dx = p1->x - p2->x;
     float dy = p1->y - p2->y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+float svgPointDistanceSA(SVGPoint * p1, SVGPoint * p2) {
+    float midx1 = (p1->x + p1->xn) / 2;
+    float midy1 = (p1->y + p1->yn) / 2;
+    float midx2 = (p2->x + p2->xn) / 2;
+    float midy2 = (p2->y + p2->yn) / 2;
+
+    float dx = midx1 - midx2;
+    float dy = midy1 - midy2;
     return sqrt(dx * dx + dy * dy);
 }
 
@@ -612,56 +615,8 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       } 
 
       //update old dist and new dist based on nearest end/start point of shape we are swapping to. Need to have points track endpoints as well.
-      float distStart1, distEnd1, distStart2, distEnd2;
-
-      if(points[shapes[pointA].id].fromStart == 1) {
-        distStart1 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
-        distEnd1 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
-
-        if(distStart1 < distEnd1) {
-          oldDist = distStart1;
-          points[shapes[pointA+1].id].fromStart = 1;
-        } else {
-          oldDist = distEnd1;
-          points[shapes[pointA+1].id].fromStart = 0;
-        }
-          
-        distStart2 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
-        distEnd2 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
-          
-        if(distStart2 < distEnd2) {
-          newDist = distStart2;
-          points[shapes[pointB].id].fromStart = 1;
-        } else {
-          newDist = distEnd2;
-          points[shapes[pointB].id].fromStart = 0;
-        }
-      } else {
-        distStart1 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
-        distEnd1 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
-          
-        if(distStart1 < distEnd1) {
-          oldDist = distStart1;
-            points[shapes[pointA+1].id].fromStart = 1;
-        } else {
-          oldDist = distEnd1;
-          points[shapes[pointA+1].id].fromStart = 0;
-        }
-          
-        distStart2 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
-        distEnd2 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
-          
-        if(distStart2 < distEnd2) {
-          newDist = distStart2;
-          points[shapes[pointB].id].fromStart = 1;
-        } else {
-          newDist = distEnd2;
-          points[shapes[pointB].id].fromStart = 0;
-        }
-      }
-
-      oldDist += svgPointDistanceSA(points[shapes[pointB].id].x, points[shapes[pointB].id].y, points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y);
-      newDist += svgPointDistanceSA(points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
+      oldDist = svgPointDistanceSA(&points[shapes[pointA].id], &points[shapes[pointA+1].id]) + svgPointDistanceSA(&points[shapes[pointB].id], &points[shapes[pointB+1].id]);
+      newDist = svgPointDistanceSA(&points[shapes[pointA].id], &points[shapes[pointB].id]) + svgPointDistanceSA(&points[shapes[pointB+1].id], &points[shapes[pointA+1].id]);
 
       if(newDist < oldDist){
         count_swaps++;
