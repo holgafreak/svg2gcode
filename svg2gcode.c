@@ -45,7 +45,7 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
@@ -1486,7 +1486,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
         printf("Writing header to color file\n");
         fflush(stdout);
-        fprintf(gcode, "( New color header called )\n");
         writeHeader(&gcodeState, color_gcode, machineType, paperDimensions);
         printf("Finish writing header to color file\n");
         fflush(stdout);
