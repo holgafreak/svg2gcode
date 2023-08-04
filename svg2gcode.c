@@ -471,9 +471,15 @@ static void calcBounds(struct NSVGimage* image, int numTools, Pen *penList, int 
   printf("shapeCount = %d\n",shapeCount);
 }
 
-float svgPointDistance(float x1, float y1, float x2, float y2) {
+float svgPointDistanceSA(float x1, float y1, float x2, float y2) {
     float dx = x1 - x2;
     float dy = y1 - y2;
+    return sqrt(dx * dx + dy * dy);
+}
+
+float svgPointDistance(SVGPoint * p1, SVGPoint * p2) {
+    float dx = p1->x - p2->x;
+    float dy = p1->y - p2->y;
     return sqrt(dx * dx + dy * dy);
 }
 
@@ -609,54 +615,53 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       float distStart1, distEnd1, distStart2, distEnd2;
 
       if(points[shapes[pointA].id].fromStart == 1) {
-          distStart1 = svgPointDistance(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
-          distEnd1 = svgPointDistance(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
+        distStart1 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
+        distEnd1 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
 
+        if(distStart1 < distEnd1) {
+          oldDist = distStart1;
+          points[shapes[pointA+1].id].fromStart = 1;
+        } else {
+          oldDist = distEnd1;
+          points[shapes[pointA+1].id].fromStart = 0;
+        }
           
-          if(distStart1 < distEnd1) {
-              oldDist = distStart1;
-              points[shapes[pointA+1].id].fromStart = 1;
-          } else {
-              oldDist = distEnd1;
-              points[shapes[pointA+1].id].fromStart = 0;
-          }
+        distStart2 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
+        distEnd2 = svgPointDistanceSA(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
           
-          distStart2 = svgPointDistance(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
-          distEnd2 = svgPointDistance(points[shapes[pointA].id].x, points[shapes[pointA].id].y, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
-          
-          if(distStart2 < distEnd2) {
-              newDist = distStart2;
-              points[shapes[pointB].id].fromStart = 1;
-          } else {
-              newDist = distEnd2;
-              points[shapes[pointB].id].fromStart = 0;
-          }
+        if(distStart2 < distEnd2) {
+          newDist = distStart2;
+          points[shapes[pointB].id].fromStart = 1;
+        } else {
+          newDist = distEnd2;
+          points[shapes[pointB].id].fromStart = 0;
+        }
       } else {
-          distStart1 = svgPointDistance(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
-          distEnd1 = svgPointDistance(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
+        distStart1 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
+        distEnd1 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointA+1].id].xn, points[shapes[pointA+1].id].yn);
           
-          if(distStart1 < distEnd1) {
-              oldDist = distStart1;
-              points[shapes[pointA+1].id].fromStart = 1;
-          } else {
-              oldDist = distEnd1;
-              points[shapes[pointA+1].id].fromStart = 0;
-          }
+        if(distStart1 < distEnd1) {
+          oldDist = distStart1;
+            points[shapes[pointA+1].id].fromStart = 1;
+        } else {
+          oldDist = distEnd1;
+          points[shapes[pointA+1].id].fromStart = 0;
+        }
           
-          distStart2 = svgPointDistance(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
-          distEnd2 = svgPointDistance(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
+        distStart2 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].x, points[shapes[pointB].id].y);
+        distEnd2 = svgPointDistanceSA(points[shapes[pointA].id].xn, points[shapes[pointA].id].yn, points[shapes[pointB].id].xn, points[shapes[pointB].id].yn);
           
-          if(distStart2 < distEnd2) {
-              newDist = distStart2;
-              points[shapes[pointB].id].fromStart = 1;
-          } else {
-              newDist = distEnd2;
-              points[shapes[pointB].id].fromStart = 0;
-          }
+        if(distStart2 < distEnd2) {
+          newDist = distStart2;
+          points[shapes[pointB].id].fromStart = 1;
+        } else {
+          newDist = distEnd2;
+          points[shapes[pointB].id].fromStart = 0;
+        }
       }
 
-      oldDist += svgPointDistance(points[shapes[pointB].id].x, points[shapes[pointB].id].y, points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y);
-      newDist += svgPointDistance(points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
+      oldDist += svgPointDistanceSA(points[shapes[pointB].id].x, points[shapes[pointB].id].y, points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y);
+      newDist += svgPointDistanceSA(points[shapes[pointB+1].id].x, points[shapes[pointB+1].id].y, points[shapes[pointA+1].id].x, points[shapes[pointA+1].id].y);
 
       if(newDist < oldDist){
         count_swaps++;
