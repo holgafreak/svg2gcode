@@ -1039,12 +1039,11 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Checking Point: X:%f Y:%f )\n", *px, *py);
 #endif
-  // if ((*px < settings->xMarginLeft || *px > settings->drawSpaceWidth + settings->xMarginLeft) || (*py > -1*(settings->yMarginTop) || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop))){
-  //   gcodeState->pointsCulledBounds++;
-  //   *writeReason = 0;
-    //return 0;
-  //} else 
-  if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
+  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
+    gcodeState->pointsCulledBounds++;
+     *writeReason = 0;
+    return 0;
+  } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
   } 
