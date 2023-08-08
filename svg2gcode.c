@@ -1020,7 +1020,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 
   if(machineType == 0 || machineType == 2) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop - 5)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
   }
 }
@@ -1450,6 +1450,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Sorting shapes by color\n");
   int mergeCount = 0;
   mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays.
+  printf("Completed mergeSort\n");
+  fflush(stdout);
 
   //create char buffer for shapes
 
