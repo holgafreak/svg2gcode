@@ -46,6 +46,7 @@
 #include <math.h>
 
 //#define DEBUG_OUTPUT
+//#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
@@ -81,7 +82,7 @@ typedef struct {
 
 typedef struct {
   int *colors;
-  int count;
+  int count; //Count of shapes to be drawn with this pen.
   int slot;
 } Pen;
 
@@ -415,10 +416,12 @@ void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel) {
 }
 
 int colorInPen(Pen pen, unsigned int color, int colorCount){
-  for(int i = 0; i < colorCount; i++){
-    if(pen.colors[i] == color){
+  int i = 0;
+  while(i < colorCount){
+    if(pen.colors[i] == color){ //Each pen holds its associated colors.
       return 1;
     }
+    i++;
   }
   return 0;
 }
@@ -518,7 +521,7 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 
     //if start and end of shape are in same location, handle this special case.
     if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
-#ifdef DEBUG_OUTPUT
+#ifdef DP_DEBUG_OUTPUT
       fprintf(gcode, "( Same start and end point )\n");
 #endif
       float maxDist = 0;
@@ -533,7 +536,7 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
         }
       }
       if(maxIndex == -1) {
-#ifdef DEBUG_OUTPUT
+#ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
         buffer[*bufferIndex] = points[startIndex];
@@ -569,7 +572,7 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
         DouglasPeucker(gcode, points, index, endIndex, epsilon, buffer, bufferIndex, pathPointsIndex, lastWritten, settings);
     }
     else {
-#ifdef DEBUG_OUTPUT
+#ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
         buffer[*bufferIndex] = points[startIndex];
@@ -577,7 +580,7 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
         *bufferIndex += 2;
     }
     if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
-#ifdef DEBUG_OUTPUT
+#ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[endIndex], points[endIndex + 1]);
 #endif
         buffer[*bufferIndex] = points[endIndex];
@@ -625,6 +628,10 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
       int pointB = rand() % (pathCount - 2);
 
       if(abs(pointB - pointA) < 2) {
+        continue;
+      }
+
+      if(pointB > pathCount -2 || pointA > pathCount-2){ //See if this stops random segfaults?
         continue;
       }
 
@@ -682,6 +689,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   printf("Un-Scaled Non-Write Travel: %f\n", tour_distance(shapes, points, pathCount));
   printf("Number of swaps %d\n", count_swaps);
   printf("Number of iterations %d\n", count_cycles);
+  fflush(stdout);
 }
 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
@@ -923,26 +931,45 @@ char* uint_to_hex_string(unsigned int num) {
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
+#ifdef DEBUG_OUTPUT
+  printf("Beginning write toolchange\n");
+  fflush(stdout);
+#endif
+
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
-    if(colorInPen(penList[gcodeState->currTool], shapes[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new shape's color is assigned to current tool
+
 #ifdef DEBUG_OUTPUT
-      fprintf(gcode, "( Shape stroke:%i currTool:%i )\n", shapes[*i].stroke, gcodeState->currTool);
+    printf("GcodeState->currTool: %d\n", gcodeState->currTool);
+    fflush(stdout);
 #endif
-      for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
-        if(colorInPen(penList[p], shapes[*i].stroke, penColorCount[p])){ //If tool p contains the new shape's color,
-          gcodeState->targetTool = p; //Set the target tool to tool p.
-          break;
+
+    //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
+    gcodeState->targetColor = shapes[*i].stroke;
+    if(gcodeState->targetColor != gcodeState->currColor){
+      for(int tool = 0; tool < numTools; tool++){ //iterate through all 6 possible pen numbers.
+      int target_color = shapes[*i].stroke; // This is the color we are trying to match against.
+        for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
+          if(penList[tool].colors[col] == target_color){
+            gcodeState->currColor = target_color;
+            gcodeState->targetTool = tool;
+            break;
+          }
         }
-        gcodeState->targetTool = 0;
       }
     }
-    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange is neccesary.
+
+    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange/pickup is neccesary.
+
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "    ( Beginning Toolchange )\n");
   fprintf(gcode, "    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
+  printf("    ( Beginning Toolchange )\n");
+  printf("    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
+  fflush(stdout);
 #endif
-      if(machineType == 0){ //Actual tool change code per machine type. LFP and MVP will want to have Pause command for fluidncc
+
+      if(machineType == 0){ //Tool change routine for 6-Color rotary.
         if(gcodeState->currTool >= 0){
           fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
@@ -962,8 +989,10 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == 2 && (gcodeState->targetTool != 0)){
-        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
+      } else if (machineType == 2 || machineType == 0){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
+        fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
+        fprintf(gcode, "M0\n");
       }
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
@@ -974,6 +1003,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 #endif
     }
   }
+  fflush(stdout);
 }
 
 
@@ -1005,16 +1035,16 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
 #endif
 }
 
-void writeHeader(GCodeState* gcodeState, FILE* gcode, int machineType, float* paperDimensions) {
+void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* settings, int machineType, float* paperDimensions) {
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
-  fprintf(gcode, "G90\nG0 M3 S%d\n", 90);
+  fprintf(gcode, "G90\nG0 M3 S%d\n", 90); //Default header for job
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
 
-  if(machineType == 0 || machineType == 2) { //6Color or MVP
+  if(machineType == 0 || machineType == 2) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(paperDimensions[1]-100.0)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop - 10)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
   }
 }
@@ -1027,15 +1057,21 @@ int lastPoint(int * sp, int * ptIndex, int * pathPointIndex){ //check if current
   return (*sp == 0 && *ptIndex == *pathPointIndex - 2) || (*sp == 1 && *ptIndex == 0);
 }
 
-int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode){ //always want to write if it is first or last point in a shape.
+//Reason == 0 -> outOfBounds, Reason == 1 -> first || last, Reason == 2-> Normal point to write.
+int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * sp, int  * ptIndex, int * pathPointIndex, float * px, float * py, FILE * gcode, int* writeReason){ //always want to write if it is first or last point in a shape.
   //want a preliminary check that the coordinates are within bounds.
-  if ((*px < settings->xMarginLeft || *px > settings->drawSpaceWidth + settings->xMarginRight) || (*py > settings->yMarginTop || *py < -1*(settings->drawSpaceHeight + settings->yMarginBottom))){
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Checking Point: X:%f Y:%f )\n", *px, *py);
+#endif
+  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
+     *writeReason = 0;
     return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
+    *writeReason = 1;
     return 1;
   } 
-  //return 1 if the distance is greater than the precision value and if it is a new point.
+  *writeReason = 2;
   return 1;
 }
 
@@ -1043,7 +1079,7 @@ int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcod
   return (!firstPoint(sp, ptIndex, pathPointIndex)) && (gcodeState->trackedDist + *dist > gcodeState->brushDist);
 }
 
-void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex) {
+void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
     float rotatedX, rotatedY, feedRate;
     float dist = 0.0;
     
@@ -1064,8 +1100,9 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
         rotatedY = scaledY;
     }
     rotatedY = -rotatedY;
+    int writeReason = -1;
 
-    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY, gcode)){ //Can write, if first or last in shape, or if dist is large enough.
+    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
       gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
       gcodeState->yold = gcodeState->y;
       gcodeState->x = rotatedX;
@@ -1109,6 +1146,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
       feedRate = interpFeedrate(gcodeState->feed, gcodeState->feedY, absoluteSlope(gcodeState->xold, gcodeState->yold, gcodeState->x, gcodeState->y));
 
       if (firstPoint(sp, ptIndex, pathPointIndex) == 0) { //If not first point
+        *pointsWritten += 1;
 #ifdef DEBUG_OUTPUT
         //fprintf(gcode, "( Writing point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
 #endif
@@ -1117,6 +1155,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
           fprintf(color_gcode,"G1 X%.4f Y%.4f F%d\n", gcodeState->x, gcodeState->y, (int)feedRate);
         }
       } else { //if is first point
+        *pointsWritten += 1;
 #ifdef DEBUG_OUTPUT
         //fprintf(gcode, "( Writing first point with ptIndex: %d, pathPointIndex: %d, X: %.4f, Y: %.4f )\n", *ptIndex, *pathPointIndex, gcodeState->x, gcodeState->y);
 #endif
@@ -1125,6 +1164,10 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
           fprintf(color_gcode, "G0 X%.4f Y%.4f\n", gcodeState->x, gcodeState->y);
         }
       }    
+    } else {
+#ifdef DEBUG_OUTPUT
+      fprintf(gcode, "( Cant write point. Reason: %d )\n", writeReason);
+#endif
     }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
@@ -1199,8 +1242,10 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
     int bufferIndex = 0;
     int lastWritten = 0;
-
 #ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Starting Shape! )\n");
+#endif
+#ifdef DP_DEBUG_OUTPUT
     fprintf(gcode, "( Points before DouglasPeucker algorithm: )\n");
     for(int z = 0; z < pathPointsIndex; z += 2) {
         fprintf(gcode, "( X: %.4f, Y: %.4f )\n", gcodeState->pathPoints[z], gcodeState->pathPoints[z + 1]);
@@ -1211,7 +1256,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     DouglasPeucker(gcode, gcodeState->pathPoints, 0, pathPointsIndex - 2, DOUGLAS_PEUCKER_EPSILON, gcodeState->pathPointsBuf, &bufferIndex, &pathPointsIndex, &lastWritten, settings);
     memcpy(gcodeState->pathPoints, gcodeState->pathPointsBuf, bufferIndex * sizeof(float));
     //track number of culled points.
-    gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*.5;
+    gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*(1/2);
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
 #ifdef DEBUG_OUTPUT
@@ -1223,20 +1268,25 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
     char isClosed = toolPaths[j].closed;
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
+    int pointsWritten = 0;
 #ifdef DEBUG_OUTPUT
-    sp = 0;
+    fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[*i].id, *i, shapes[*i].stroke);
+    fprintf(gcode, "( NumPoints: %d, PathPointsIndex: %d, SP: %d )\n", pathPointsIndex/2, pathPointsIndex, sp);
 #endif
     if(sp){
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
       }
     } else {
       for(int z = 0; z < pathPointsIndex; z += 2){
         // Print out point before writing
-        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex);
+        writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
       }
     }
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Points Written: %d )\n", pointsWritten);
+#endif
 
     toolUp(gcode, gcodeState, machineTypePtr);
     if(gcodeState->colorFileOpen && gcodeState->colorToFile){
@@ -1357,6 +1407,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Settings and calculations for rotation + transformation.
   TransformSettings settings = calcTransform(g_image, paperDimensions, generationConfig);
   printTransformSettings(settings);
+  fflush(stdout);
 
 #ifdef _WIN32
   seedrand((float)time(0));
@@ -1422,6 +1473,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Sorting shapes by color\n");
   int mergeCount = 0;
   mergeSort(shapes, 0, pathCount-1, 0, &mergeCount); //this is stable and can be called on subarrays.
+  printf("Completed mergeSort\n");
+  fflush(stdout);
 
   //create char buffer for shapes
 
@@ -1430,7 +1483,14 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   //Break into writeHeader method.
 
   start_write = clock();
-  writeHeader(&gcodeState, gcode, machineType, paperDimensions);
+  writeHeader(&gcodeState, gcode, &settings, machineType, paperDimensions);
+  printf("Wrote header\n");
+  fflush(stdout);
+
+  for(int i = 0; i < numTools; i++){
+    printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
+  }
+  fflush(stdout);
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
@@ -1447,9 +1507,6 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       printf("Continue hit\n");
       continue;
     }
-#ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[i].id, i, shapes[i].stroke);
-#endif
     
     //Handling for color file pointer at start of new file. May want to refactor this.
     if(gcodeState.colorToFile){ //If we are writing colors to files.
@@ -1488,7 +1545,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
         printf("Writing header to color file\n");
         fflush(stdout);
-        writeHeader(&gcodeState, color_gcode, machineType, paperDimensions);
+        writeHeader(&gcodeState, color_gcode, &settings, machineType, paperDimensions);
         printf("Finish writing header to color file\n");
         fflush(stdout);
       }
