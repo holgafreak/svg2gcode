@@ -955,14 +955,18 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
     printf("GcodeState->currTool: %d\n", gcodeState->currTool);
     fflush(stdout);
 #endif
-    //Hopefully this sets target tool without looking at currTool.
-    for(int tool = 0; tool < numTools; tool++){ //iterate through all 6 possible pen numbers.
+
+    //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
+    gcodeState->targetColor = shapes[*i].stroke;
+    if(gcodeState->targetColor != gcodeState->currColor){
+      for(int tool = 0; tool < numTools; tool++){ //iterate through all 6 possible pen numbers.
       int target_color = shapes[*i].stroke; // This is the color we are trying to match against.
-      for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
-        if(penList[tool].colors[col] == target_color){
-          gcodeState->targetColor = target_color;
-          gcodeState->targetTool = tool;
-          break;
+        for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
+          if(penList[tool].colors[col] == target_color){
+            gcodeState->currColor = target_color;
+            gcodeState->targetTool = tool;
+            break;
+          }
         }
       }
     }
