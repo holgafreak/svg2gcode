@@ -82,7 +82,7 @@ typedef struct {
 
 typedef struct {
   int *colors;
-  int count;
+  int count; //Count of shapes to be drawn with this pen.
   int slot;
 } Pen;
 
@@ -416,11 +416,25 @@ void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel) {
 }
 
 int colorInPen(Pen pen, unsigned int color, int colorCount){
-  for(int i = 0; i < colorCount; i++){
-    if(pen.colors[i] == color){
+  printf("Color: %d, ColorCount: %d\n", color, colorCount);
+  fflush(stdout);
+  int i = 0;
+  while(i < colorCount){
+    printf("Checking i == %d in colorInPen\n", i);
+    fflush(stdout);
+    if(pen.colors[i] == color){ //Each pen holds its associated colors.
+#ifdef DEBUG_OUTPUT
+      // printf("Color %d found in Pen %d\n", color, i);
+      // fflush(stdout);
+#endif
       return 1;
     }
+    i++;
   }
+#ifdef DEBUG_OUTPUT
+  // printf("Color %d NOT found in Pen %d\n", color, i);
+  // fflush(stdout);
+#endif
   return 0;
 }
 
@@ -929,26 +943,41 @@ char* uint_to_hex_string(unsigned int num) {
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
+#ifdef DEBUG_OUTPUT
+  printf("Beginning write toolchange\n");
+  fflush(stdout);
+#endif
+
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
-    if(colorInPen(penList[gcodeState->currTool], shapes[*i].stroke, penColorCount[gcodeState->currTool]) == 0){ //this checks if new shape's color is assigned to current tool
+
 #ifdef DEBUG_OUTPUT
-      fprintf(gcode, "( Shape stroke:%i currTool:%i )\n", shapes[*i].stroke, gcodeState->currTool);
+    printf("GcodeState->currTool: %d\n", gcodeState->currTool);
+    fflush(stdout);
 #endif
-      for(int p = 0; p < numTools; p++){ //iterate through tools numbers (0 -> numTools-1). 
-        if(colorInPen(penList[p], shapes[*i].stroke, penColorCount[p])){ //If tool p contains the new shape's color,
-          gcodeState->targetTool = p; //Set the target tool to tool p.
+    //Hopefully this sets target tool without looking at currTool.
+    for(int tool = 0; tool < numTools; tool++){ //iterate through all 6 possible pen numbers.
+      int target_color = shapes[*i].stroke; // This is the color we are trying to match against.
+      for(int col = 0; col < penColorCount[tool]; col++){ //for the number of colors associated with each tool. If target_colorin penList[tool].colors
+        if(penList[tool].colors[col] == target_color){
+          gcodeState->targetColor = target_color;
+          gcodeState->targetTool = tool;
           break;
         }
-        gcodeState->targetTool = 0;
       }
     }
-    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange is neccesary.
+
+    if(gcodeState->targetTool != gcodeState->currTool){ //This is true if toolchange/pickup is neccesary.
+
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "    ( Beginning Toolchange )\n");
   fprintf(gcode, "    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
+  printf("    ( Beginning Toolchange )\n");
+  printf("    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
+  fflush(stdout);
 #endif
-      if(machineType == 0){ //Actual tool change code per machine type. LFP and MVP will want to have Pause command for fluidncc
+
+      if(machineType == 0){ //Tool change routine for 6-Color rotary.
         if(gcodeState->currTool >= 0){
           fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
@@ -968,8 +997,10 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == 2 && (gcodeState->targetTool != 0)){
-        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d)\n", gcodeState->targetTool);
+      } else if (machineType == 2 || machineType == 0){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
+        fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
+        fprintf(gcode, "M0\n");
       }
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
@@ -980,6 +1011,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 #endif
     }
   }
+  fflush(stdout);
 }
 
 
@@ -1020,7 +1052,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 
   if(machineType == 0 || machineType == 2) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
-    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop - 5)), gcodeState->feedY);
+    fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop - 10)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
   }
 }
@@ -1460,6 +1492,13 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   start_write = clock();
   writeHeader(&gcodeState, gcode, &settings, machineType, paperDimensions);
+  printf("Wrote header\n");
+  fflush(stdout);
+
+  for(int i = 0; i < numTools; i++){
+    printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
+  }
+  fflush(stdout);
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
