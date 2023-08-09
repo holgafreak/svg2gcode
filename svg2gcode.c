@@ -416,25 +416,13 @@ void mergeSort(Shape * arr, int left, int right, int level, int* mergeLevel) {
 }
 
 int colorInPen(Pen pen, unsigned int color, int colorCount){
-  printf("Color: %d, ColorCount: %d\n", color, colorCount);
-  fflush(stdout);
   int i = 0;
   while(i < colorCount){
-    printf("Checking i == %d in colorInPen\n", i);
-    fflush(stdout);
     if(pen.colors[i] == color){ //Each pen holds its associated colors.
-#ifdef DEBUG_OUTPUT
-      // printf("Color %d found in Pen %d\n", color, i);
-      // fflush(stdout);
-#endif
       return 1;
     }
     i++;
   }
-#ifdef DEBUG_OUTPUT
-  // printf("Color %d NOT found in Pen %d\n", color, i);
-  // fflush(stdout);
-#endif
   return 0;
 }
 
