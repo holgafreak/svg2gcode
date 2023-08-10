@@ -516,10 +516,10 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     int index = -1;
 
     //First and last point in divided segment.
-    float x1 = (points[startIndex]) * (settings->scale);
-    float y1 = (points[startIndex + 1]) * (settings->scale);
-    float x2 = (points[endIndex]) * (settings->scale);
-    float y2 = (points[endIndex + 1]) * (settings->scale);
+    float x1 = (points[startIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float y1 = (points[startIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float x2 = (points[endIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float y2 = (points[endIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
 
     //if start and end of shape are in same location, handle this special case.
     if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
@@ -529,8 +529,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
       float maxDist = 0;
       int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
-        float checkX = points[i] *settings->scale;
-        float checkY = points[i+1] * settings->scale;
+        float checkX = points[i] *settings->scale * (settings->pointsToDocumentScale);
+        float checkY = points[i+1] * settings->scale * (settings->pointsToDocumentScale);
         float dist = distanceBetweenPoints(x1, y1, checkX, checkY);
         if(dist > maxDist){
           maxDist = dist;
@@ -558,8 +558,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     //Get the perpendicular distance to pN from line between pStart pEnd.
     //Find the maximum index of such point and track the value.
     for(int i = startIndex + 2; i < endIndex; i += 2) {
-        float px = points[i] * settings->scale;
-        float py = points[i + 1] * settings->scale;
+        float px = points[i] * settings->scale * (settings->pointsToDocumentScale);
+        float py = points[i + 1] * settings->scale * (settings->pointsToDocumentScale);
         float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
         if (d >= dmax) {
             index = i;
