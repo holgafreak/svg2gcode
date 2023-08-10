@@ -100,6 +100,7 @@ typedef struct {
 
 typedef struct TransformSettings {
     float scale;
+    float pointsToDocumentScale;
     float drawingWidth;
     float drawingHeight;
     float drawSpaceWidth;
@@ -120,6 +121,7 @@ typedef struct TransformSettings {
     int centerOnMaterial;
     int swapDim;
     int svgRotation;
+    float* pointBounds;
 } TransformSettings;
 
 typedef struct GCodeState {
@@ -514,10 +516,10 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     int index = -1;
 
     //First and last point in divided segment.
-    float x1 = (points[startIndex]) * (settings->scale);
-    float y1 = (points[startIndex + 1]) * (settings->scale);
-    float x2 = (points[endIndex]) * (settings->scale);
-    float y2 = (points[endIndex + 1]) * (settings->scale);
+    float x1 = (points[startIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float y1 = (points[startIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float x2 = (points[endIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float y2 = (points[endIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
 
     //if start and end of shape are in same location, handle this special case.
     if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
@@ -527,8 +529,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
       float maxDist = 0;
       int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
-        float checkX = points[i] *settings->scale;
-        float checkY = points[i+1] * settings->scale;
+        float checkX = points[i] *settings->scale * (settings->pointsToDocumentScale);
+        float checkY = points[i+1] * settings->scale * (settings->pointsToDocumentScale);
         float dist = distanceBetweenPoints(x1, y1, checkX, checkY);
         if(dist > maxDist){
           maxDist = dist;
@@ -539,8 +541,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[startIndex];
-        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        buffer[*bufferIndex] = (points[startIndex] - bounds[0])* settings->pointsToDocumentScale; //x 
+        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale; //y
         *bufferIndex += 2;
         return;
       } else {
@@ -556,8 +558,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     //Get the perpendicular distance to pN from line between pStart pEnd.
     //Find the maximum index of such point and track the value.
     for(int i = startIndex + 2; i < endIndex; i += 2) {
-        float px = points[i] * settings->scale;
-        float py = points[i + 1] * settings->scale;
+        float px = points[i] * settings->scale * (settings->pointsToDocumentScale);
+        float py = points[i + 1] * settings->scale * (settings->pointsToDocumentScale);
         float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
         if (d >= dmax) {
             index = i;
@@ -575,16 +577,16 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[startIndex];
-        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        buffer[*bufferIndex] = (points[startIndex] - bounds[0]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
         *bufferIndex += 2;
     }
     if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[endIndex], points[endIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[endIndex];
-        buffer[*bufferIndex + 1] = points[endIndex + 1];
+        buffer[*bufferIndex] = (points[endIndex] - bounds[0]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex + 1] = (points[endIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
         *bufferIndex += 2;
         *lastWritten = 1;
     }
@@ -675,7 +677,7 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
     temp *= 1 - coolingRate;
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
-        printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
+        // printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
         printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
         printf("  Elapsed Time: %f\n", elapsed_time);
         lastPrintTemp = temp;
@@ -694,9 +696,25 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
+
+  settings.pointBounds = bounds;
+  //bounds of points
+  float pointsWidth = bounds[2] - bounds[0];
+  float pointsHeight = bounds[3] - bounds[1];
+
+  //document dimensions
   float width = g_image->width;
   float height = g_image->height;
   printf("Image width:%f Image Height:%f\n", width, height);
+  printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
+
+  settings.pointsToDocumentScale = 1;
+  if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
+    float pointsRatio = pointsWidth/pointsHeight; //scaling from
+    float imageRatio = width/height; //scaling to
+    settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
+    printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
+  }
 
   settings.svgRotation = generationConfig[2];
   settings.xMarginLeft = paperDimensions[2];
@@ -706,6 +724,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   //scaling + fitting operations.
   settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight;
   settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
+  printf("PaperDimensions X:%f, PaperDimension Y:%f\n",paperDimensions[0], paperDimensions[1]);
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
   settings.swapDim = (generationConfig[2] == 1 || generationConfig[2] == 3);
 
@@ -728,8 +747,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (settings.fitToMaterial) {
-    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-    float svgRatio = width / height;
+    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
+    float svgRatio = width / height; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
     printf("Scale%f\n", settings.scale);
     settings.drawingWidth = width * settings.scale;
@@ -771,6 +790,10 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 }
 
 void printTransformSettings(TransformSettings settings) {
+  printf("Point Bounds\n");
+  for(int i = 0; i < 4; i++){
+    printf("Bounds[%d] = %f\n", i, bounds[i]);
+  }
   printf("\n\nscale: %f\n", settings.scale);
   printf("drawingWidth: %f\n", settings.drawingWidth);
   printf("drawingHeight: %f\n", settings.drawingHeight);
@@ -931,19 +954,8 @@ char* uint_to_hex_string(unsigned int num) {
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
-#ifdef DEBUG_OUTPUT
-  printf("Beginning write toolchange\n");
-  fflush(stdout);
-#endif
-
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
-
-#ifdef DEBUG_OUTPUT
-    printf("GcodeState->currTool: %d\n", gcodeState->currTool);
-    fflush(stdout);
-#endif
-
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
     if(gcodeState->targetColor != gcodeState->currColor){
@@ -1215,6 +1227,9 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
 void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
+
+    // printf("Shape %d at i:%d. Color: %i\n", shapes[*i].id, *i, shapes[*i].stroke);
+    // printf("Scale: %f, Rotation: %d, ShiftX: %f, ShiftY: %f\n", settings->scale, settings->svgRotation, settings->shiftX, settings->shiftY);
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
     gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path. (x, y)
@@ -1259,7 +1274,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*(1/2);
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
-#ifdef DEBUG_OUTPUT
+#ifdef DEBUG_OUTPUTs
     fprintf(gcode, "( Points after DouglasPeucker algorithm: )\n");
     for(int z = 0; z < pathPointsIndex; z += 2) {
         fprintf(gcode, "( X: %.4f, Y: %.4f )\n", gcodeState->pathPoints[z], gcodeState->pathPoints[z + 1]);
@@ -1270,7 +1285,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     int pointsWritten = 0;
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[*i].id, *i, shapes[*i].stroke);
+    fprintf(gcode, "( Shape %d at i:%d. Color: %i. Scale: %f, ShiftX: %f, ShiftY: %f, Rotation: %d )\n", shapes[*i].id, *i, shapes[*i].stroke, settings->scale, settings->shiftX, settings->shiftY, settings->svgRotation*90);
     fprintf(gcode, "( NumPoints: %d, PathPointsIndex: %d, SP: %d )\n", pathPointsIndex/2, pathPointsIndex, sp);
 #endif
     if(sp){
@@ -1384,7 +1399,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind],"mm", 25.4);
+  g_image = nsvgParseFromFile(argv[optind], "mm", 25.4);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
@@ -1487,10 +1502,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Wrote header\n");
   fflush(stdout);
 
-  for(int i = 0; i < numTools; i++){
-    printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
-  }
-  fflush(stdout);
+  // for(int i = 0; i < numTools; i++){
+  //   printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
+  // }
+  // fflush(stdout);
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
