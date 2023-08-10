@@ -722,13 +722,13 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("Image width:%f Image Height:%f\n", width, height);
   printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
 
-  settings.pointsToDocumentScale = 1;
-  if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
-    float pointsRatio = pointsWidth/pointsHeight; //scaling from
-    float imageRatio = width/height; //scaling to
-    settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
-    printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
-  }
+  // settings.pointsToDocumentScale = 1;
+  // if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
+  //   float pointsRatio = pointsWidth/pointsHeight; //scaling from
+  //   float imageRatio = width/height; //scaling to
+  //   settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
+  //   printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
+  // }
   settings.pointsToDocumentScale = 1;
 
   settings.svgRotation = generationConfig[2];
@@ -808,9 +808,10 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 void printTransformSettings(TransformSettings settings) {
   printf("Point Bounds\n");
   for(int i = 0; i < 4; i++){
-    printf("Bounds[%d] = %f\n", i, bounds[i]);
+    printf("    Bounds[%d] = %f\n", i, bounds[i]);
   }
-  printf("\n\nscale: %f\n", settings.scale);
+  printf("\nscale: %f\n", settings.scale);
+  printf("pointsToDocumentScale: %f\n", settings.pointsToDocumentScale);
   printf("drawingWidth: %f\n", settings.drawingWidth);
   printf("drawingHeight: %f\n", settings.drawingHeight);
   printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
@@ -970,7 +971,7 @@ char* uint_to_hex_string(unsigned int num) {
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
-  if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
+  if(machineType == 0 || machineType == 2 || machineType == 1){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
@@ -1017,7 +1018,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == 2 || machineType == 0){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == 2 || machineType == 1){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
@@ -1385,6 +1386,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printGCodeState(&gcodeState);
 
   int machineType = generationConfig[3]; //machineType
+  printf("Machine Type: %d\n", machineType);
   int ch;
  
   FILE *gcode;
