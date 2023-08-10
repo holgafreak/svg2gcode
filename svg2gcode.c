@@ -45,8 +45,8 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-//#define DEBUG_OUTPUT
-//#define DP_DEBUG_OUTPUT
+#define DEBUG_OUTPUT
+#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
@@ -675,11 +675,11 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
     temp *= 1 - coolingRate;
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
-        printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
-        printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
-        printf("  Elapsed Time: %f\n", elapsed_time);
+        // printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
+        // printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
+        // printf("  Elapsed Time: %f\n", elapsed_time);
         lastPrintTemp = temp;
-        fflush(stdout);
+        //fflush(stdout);
     }
     if (elapsed_time >= MAX_OPT_SECONDS) {
         break;
@@ -1067,7 +1067,7 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
      *writeReason = 0;
-    //return 0;
+    return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
@@ -1216,6 +1216,9 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
 void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, Shape * shapes, ToolPath * toolPaths, int * machineTypePtr, int * k, int * i) { //k is index in toolPaths. i is index i shapes.
     float rotatedX, rotatedY, rotatedBX, rotatedBY, tempRot;
     int j, l; //local iterators with k <= j, l < npaths;
+
+    // printf("Shape %d at i:%d. Color: %i\n", shapes[*i].id, *i, shapes[*i].stroke);
+    // printf("Scale: %f, Rotation: %d, ShiftX: %f, ShiftY: %f\n", settings->scale, settings->svgRotation, settings->shiftX, settings->shiftY);
     
     gcodeState->pathPoints[0] = toolPaths[*k].points[0]; //first points into pathPoints. Not yet scaled or rotated.
     gcodeState->pathPoints[1] = toolPaths[*k].points[1]; //0, 1 are startpoint of path. (x, y)
@@ -1260,7 +1263,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     gcodeState->pointsCulledPrec += (int)(pathPointsIndex - bufferIndex)*(1/2);
     pathPointsIndex = bufferIndex; //set pathPointsIndex to optimized points buffer size.
 
-#ifdef DEBUG_OUTPUT
+#ifdef DEBUG_OUTPUTs
     fprintf(gcode, "( Points after DouglasPeucker algorithm: )\n");
     for(int z = 0; z < pathPointsIndex; z += 2) {
         fprintf(gcode, "( X: %.4f, Y: %.4f )\n", gcodeState->pathPoints[z], gcodeState->pathPoints[z + 1]);
@@ -1271,7 +1274,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     int sp = nearestStartPoint(gcode, gcodeState, settings, pathPointsIndex);
     int pointsWritten = 0;
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( Shape %d at i:%d. Color: %i )\n", shapes[*i].id, *i, shapes[*i].stroke);
+    fprintf(gcode, "( Shape %d at i:%d. Color: %i. Scale: %f, ShiftX: %f, ShiftY: %f, Rotation: %d )\n", shapes[*i].id, *i, shapes[*i].stroke, settings->scale, settings->shiftX, settings->shiftY, settings->svgRotation*90);
     fprintf(gcode, "( NumPoints: %d, PathPointsIndex: %d, SP: %d )\n", pathPointsIndex/2, pathPointsIndex, sp);
 #endif
     if(sp){
@@ -1385,7 +1388,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind],"mm", 25.4);
+  g_image = nsvgParseFromFile(argv[optind], "mm", 25.4);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
@@ -1488,10 +1491,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("Wrote header\n");
   fflush(stdout);
 
-  for(int i = 0; i < numTools; i++){
-    printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
-  }
-  fflush(stdout);
+  // for(int i = 0; i < numTools; i++){
+  //   printf("PenColorCount[%d]: %d\n", i, penColorCount[i]);
+  // }
+  // fflush(stdout);
 
   //WRITING PATHS BEGINS HERE. 
   for(i=0;i<pathCount;i++) { //equal to the number of shapes, which is the number of NSVGPaths.
