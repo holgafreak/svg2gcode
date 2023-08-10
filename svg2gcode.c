@@ -708,6 +708,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("Image width:%f Image Height:%f\n", width, height);
   printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
 
+  settings.pointsToDocumentScale = 1;
   if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
     float pointsRatio = pointsWidth/pointsHeight; //scaling from
     float imageRatio = width/height; //scaling to
