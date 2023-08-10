@@ -743,7 +743,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("Fit To Mat from Config = %i\n", generationConfig[0]);
 #endif
   // Determine if fitting to material is necessary
-  settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceHeight) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
+  settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceWidth) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
+  printf("DrawingWidth: %f, DrawingHeight: %f, DrawSpaceHeight: %f, DrawSpaceWidth: %f, FitToMaterial %d\n", settings.drawingWidth, settings.drawingHeight, settings.drawSpaceWidth, settings.drawSpaceHeight, settings.fitToMaterial);
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (settings.fitToMaterial) {
