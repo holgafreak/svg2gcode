@@ -2481,6 +2481,11 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 		else
 			p->viewHeight = bounds[3];
 	}
+  printf("Image Bounds in nsvg__scaleToViewbox:\n");
+  for(int i = 0; i < 4; i++){
+    printf("    Image Bounds[%d]: %f\n", i, bounds[i]);
+  }
+
 	if (p->image->width == 0)
 		p->image->width = p->viewWidth;
 	if (p->image->height == 0)

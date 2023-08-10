@@ -729,6 +729,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
     printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
   }
+  settings.pointsToDocumentScale = 1;
 
   settings.svgRotation = generationConfig[2];
   settings.xMarginLeft = paperDimensions[2];
@@ -1414,7 +1415,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind], "mm", 25.4);
+  g_image = nsvgParseFromFile(argv[optind], "px", 96);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
