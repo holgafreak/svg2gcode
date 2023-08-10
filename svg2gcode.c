@@ -45,8 +45,8 @@
 #include "svg2gcode.h"
 #include <math.h>
 
-#define DEBUG_OUTPUT
-#define DP_DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
+//#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
