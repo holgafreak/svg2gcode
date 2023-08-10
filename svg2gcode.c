@@ -100,6 +100,7 @@ typedef struct {
 
 typedef struct TransformSettings {
     float scale;
+    float pointsToDocumentScale;
     float drawingWidth;
     float drawingHeight;
     float drawSpaceWidth;
@@ -120,6 +121,7 @@ typedef struct TransformSettings {
     int centerOnMaterial;
     int swapDim;
     int svgRotation;
+    float* pointBounds;
 } TransformSettings;
 
 typedef struct GCodeState {
@@ -539,8 +541,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[startIndex];
-        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        buffer[*bufferIndex] = (points[startIndex] - bounds[0])* settings->pointsToDocumentScale; //x 
+        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale; //y
         *bufferIndex += 2;
         return;
       } else {
@@ -575,16 +577,16 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[startIndex];
-        buffer[*bufferIndex + 1] = points[startIndex + 1];
+        buffer[*bufferIndex] = (points[startIndex] - bounds[0]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
         *bufferIndex += 2;
     }
     if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[endIndex], points[endIndex + 1]);
 #endif
-        buffer[*bufferIndex] = points[endIndex];
-        buffer[*bufferIndex + 1] = points[endIndex + 1];
+        buffer[*bufferIndex] = (points[endIndex] - bounds[0]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex + 1] = (points[endIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
         *bufferIndex += 2;
         *lastWritten = 1;
     }
@@ -694,9 +696,24 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
+
+  settings.pointBounds = bounds;
+  //bounds of points
+  float pointsWidth = bounds[2] - bounds[0];
+  float pointsHeight = bounds[3] - bounds[1];
+
+  //document dimensions
   float width = g_image->width;
   float height = g_image->height;
   printf("Image width:%f Image Height:%f\n", width, height);
+  printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
+
+  if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
+    float pointsRatio = pointsWidth/pointsHeight; //scaling from
+    float imageRatio = width/height; //scaling to
+    settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
+    printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
+  }
 
   settings.svgRotation = generationConfig[2];
   settings.xMarginLeft = paperDimensions[2];
@@ -729,8 +746,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   // If fitting to material, calculate scale and new drawing dimensions
   if (settings.fitToMaterial) {
-    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-    float svgRatio = width / height;
+    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
+    float svgRatio = width / height; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
     printf("Scale%f\n", settings.scale);
     settings.drawingWidth = width * settings.scale;
@@ -772,6 +789,10 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 }
 
 void printTransformSettings(TransformSettings settings) {
+  printf("Point Bounds\n");
+  for(int i = 0; i < 4; i++){
+    printf("Bounds[%d] = %f\n", i, bounds[i]);
+  }
   printf("\n\nscale: %f\n", settings.scale);
   printf("drawingWidth: %f\n", settings.drawingWidth);
   printf("drawingHeight: %f\n", settings.drawingHeight);
@@ -932,19 +953,8 @@ char* uint_to_hex_string(unsigned int num) {
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
-#ifdef DEBUG_OUTPUT
-  printf("Beginning write toolchange\n");
-  fflush(stdout);
-#endif
-
   if(machineType == 0 || machineType == 2){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
-
-#ifdef DEBUG_OUTPUT
-    printf("GcodeState->currTool: %d\n", gcodeState->currTool);
-    fflush(stdout);
-#endif
-
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
     if(gcodeState->targetColor != gcodeState->currColor){
