@@ -678,10 +678,10 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 
     if (lastPrintTemp - temp >= 0.1 * lastPrintTemp) {
         // printf("  Distance Improvement %f\n", tour_distance(shapes, points, pathCount) - previousDistance);
-        // printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
-        // printf("  Elapsed Time: %f\n", elapsed_time);
+        printf("  Avg Improvement over last %d: %f\n", AVG_OPT_WINDOW, dist_avg_improvement);
+        printf("  Elapsed Time: %f\n", elapsed_time);
         lastPrintTemp = temp;
-        //fflush(stdout);
+        fflush(stdout);
     }
     if (elapsed_time >= MAX_OPT_SECONDS) {
         break;
