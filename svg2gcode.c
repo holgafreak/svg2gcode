@@ -105,6 +105,8 @@ typedef struct TransformSettings {
     float drawingHeight;
     float drawSpaceWidth;
     float drawSpaceHeight;
+    float loadedFileWidth;
+    float loadedFileHeight;
     float shiftX;
     float shiftY;
     float centerX;
@@ -716,14 +718,14 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   float pointsWidth = bounds[2] - bounds[0];
   float pointsHeight = bounds[3] - bounds[1];
 
-  //document dimensions
-  float width = g_image->width;
-  float height = g_image->height;
+  //Width and height of the document in mm.
+  float width = paperDimensions[9];//g_image->width;
+  float height = paperDimensions[10];//g_image->height;
   printf("Image width:%f Image Height:%f\n", width, height);
   printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
 
-  // settings.pointsToDocumentScale = 1;
-  // if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
+  // settings.pointsToDocumentScale = 1; //If we are not scaling to paper size, we want to scale the points to the document bounds from the SVGConverter.
+  // if(((pointsWidth > width) || (pointsHeight > height)) && !generationConfig[0]){ //If we need to scale the points to the parsed document bounds.
   //   float pointsRatio = pointsWidth/pointsHeight; //scaling from
   //   float imageRatio = width/height; //scaling to
   //   settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
@@ -731,6 +733,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   // }
   settings.pointsToDocumentScale = 1;
 
+  settings.loadedFileWidth = paperDimensions[9];
+  settings.loadedFileHeight = paperDimensions[10];
   settings.svgRotation = generationConfig[2];
   settings.xMarginLeft = paperDimensions[2];
   settings.yMarginTop = paperDimensions[3];
@@ -758,11 +762,13 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("Fit To Mat from Config = %i\n", generationConfig[0]);
 #endif
   // Determine if fitting to material is necessary
+  //Now, this is pulling the width/height in mm of the document. If width/height is too large, scale it down, or if it is toggled to scale up to material.
   settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceWidth) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
   printf("DrawingWidth: %f, DrawingHeight: %f, DrawSpaceHeight: %f, DrawSpaceWidth: %f, FitToMaterial %d\n", settings.drawingWidth, settings.drawingHeight, settings.drawSpaceWidth, settings.drawSpaceHeight, settings.fitToMaterial);
 
   // If fitting to material, calculate scale and new drawing dimensions
-  if (settings.fitToMaterial) {
+  if (settings.fitToMaterial) { //If scaling up or down to drawSpace.
+      printf("FitToMat\n");
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
     float svgRatio = width / height; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
@@ -770,8 +776,15 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.drawingWidth = width * settings.scale;
     settings.drawingHeight = height * settings.scale;
     printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-  } else {
-    settings.scale = 1;
+  } else { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
+    printf("!FitToMat\n");
+    float svgRatio = width/height; //scaling to
+    float pointsRatio = pointsWidth/pointsHeight;
+    settings.scale = (svgRatio / pointsRatio) ? (settings.drawingHeight / pointsHeight) : (settings.drawingWidth / pointsWidth);
+    printf("Scale%f\n", settings.scale);
+    settings.drawingWidth = pointsWidth * settings.scale;
+    settings.drawingHeight = pointsHeight * settings.scale;
+    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
   }
 
   settings.shiftX = settings.xMarginLeft;
@@ -816,6 +829,8 @@ void printTransformSettings(TransformSettings settings) {
   printf("drawingHeight: %f\n", settings.drawingHeight);
   printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
   printf("drawSpaceHeight: %f\n", settings.drawSpaceHeight);
+  printf("loadedFileWidth: %f\n", settings.loadedFileWidth);
+  printf("loadedFileHeight: %f\n", settings.loadedFileHeight);
   printf("shiftX: %f\n", settings.shiftX);
   printf("shiftY: %f\n", settings.shiftY);
   printf("centerX: %f\n", settings.centerX);
