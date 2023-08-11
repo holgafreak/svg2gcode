@@ -2423,6 +2423,8 @@ static void nsvg__content(void* ud, const char* s)
 }
 
 static void nsvg__imageBounds(NSVGparser* p, float* bounds)
+//finds the min and max bounds for paths.
+//I think we want to set bounds to 
 {
 	NSVGshape* shape;
 	shape = p->image->shapes;
@@ -2498,12 +2500,15 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	us = 1.0f / nsvg__convertToPixels(p, 1.0f, MRDS(units), 0);
 
 	// Fix aspect ratio
-	if (p->alignType == NSVG_ALIGN_MEET) {
+  printf("NSVG_ALIGN_TYPE: %d\n", p->alignType);
+	if (p->alignType == NSVG_ALIGN_MEET) { //I think we want this?
+    printf("NSVG_ALIGN_MEET\n");
 		// fit whole image into viewbox
 		sx = sy = nsvg__minf(sx, sy);
 		tx += nsvg__viewAlign(p->viewWidth*sx, p->image->width, p->alignX) / sx;
 		ty += nsvg__viewAlign(p->viewHeight*sy, p->image->height, p->alignY) / sy;
 	} else if (p->alignType == NSVG_ALIGN_SLICE) {
+        printf("NSVG_ALIGN_SLICE\n");
 		// fill whole viewbox with image
 		sx = sy = nsvg__maxf(sx, sy);
 		tx += nsvg__viewAlign(p->viewWidth*sx, p->image->width, p->alignX) / sx;

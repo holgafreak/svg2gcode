@@ -770,12 +770,12 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.drawingWidth = width * settings.scale;
     settings.drawingHeight = height * settings.scale;
     printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-    settings.shiftX = settings.xMarginLeft;
-    settings.shiftY = settings.yMarginTop;
   } else {
     settings.scale = 1;
   }
 
+  settings.shiftX = settings.xMarginLeft;
+  settings.shiftY = settings.yMarginTop;
   settings.centerOnMaterial = generationConfig[1];
 
   // If centering on material, calculate shift
