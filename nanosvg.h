@@ -140,6 +140,8 @@ typedef struct NSVGimage
 {
 	float width;				// Width of the image.
 	float height;				// Height of the image.
+  float viewMinx, viewMiny, viewWidth, viewHeight; //Viewbox information
+  int alignType; //How to align to viewbox.
 	NSVGshape* shapes;			// Linked list of shapes in the image.
 } NSVGimage;
 
@@ -2568,6 +2570,12 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 	// Scale to viewBox
 	nsvg__scaleToViewbox(p, MRDS(units));
 
+  //Send viewbox information to nsvgimage
+  p->image->viewHeight = p->viewHeight;
+  p->image->viewWidth = p->viewWidth;
+  p->image->viewMinx = p->viewMinx;
+  p->image->viewMiny = p->viewMiny;
+  p->image->alignType = p->alignType;
 	ret = p->image;
 	p->image = NULL;
 
