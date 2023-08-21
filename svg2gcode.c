@@ -725,15 +725,15 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.loadedFileWidth = width; //Width and height of svg from frontend.
   settings.loadedFileHeight = height;
   settings.svgRotation = generationConfig[2]; //Rotation amount /90
-  settings.xMarginLeft = paperDimensions[2];
+  settings.xMarginLeft = paperDimensions[2]; //Margins
   settings.yMarginTop = paperDimensions[3];
   settings.xMarginRight = paperDimensions[7];
   settings.yMarginBottom = paperDimensions[8];
-  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight; //Amount of space.
+  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight; //Amount of space for drawing.
   settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
   settings.pointBounds = bounds; //[xmin, ymin, xmax, ymax] bounding box of points in doc.
   //bounds of points
-  float pointsWidth = bounds[2] - bounds[0]; //The bounds of the points in the entire document, may or may not fit inside or outside of the viewbox. 
+  float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
   float pointsHeight = bounds[3] - bounds[1];
 
   printf("Viewbox info from g_image: viewMinx: %f, viewMiny: %f, viewWidth: %f, viewHeight: %f, alignType: %d\n", g_image->viewMinx, g_image->viewMiny, g_image->viewWidth, g_image->viewHeight, g_image->alignType);
@@ -753,7 +753,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     printf("Swapped image width:%f Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   }
 
-  //assume g_image->alignType = 0 for now.
+  //assume g_image->alignType = 0 for now. Currently inset values are not scaled to paper dimensions.
   settings.xInsetLeft = bounds[0] - g_image->viewMinx; // Left side of point bounding box distance from viewbox
   settings.xInsetRight = (g_image->viewMinx + g_image->viewWidth) - bounds[2]; // Right side
   settings.yInsetTop = bounds[1] - g_image->viewMiny; // Top side
@@ -773,24 +773,22 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     printf("Scale%f\n", settings.scale);
     settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
     settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    printf("Scaled loadedFileWidth:%f loadedFileHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   } 
-  else if (!settings.fitToMaterial && (pointsWidth > settings.loadedFileWidth || pointsHeight > settings.loadedFileHeight)) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
-    printf("!FitToMat + points oob\n");
+  else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
+    printf("!FitToMat\n");
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
     float pointsRatio = pointsWidth / pointsHeight;
     settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
     printf("Scale%f\n", settings.scale);
     settings.loadedFileWidth = pointsWidth * settings.scale;
     settings.loadedFileHeight = pointsHeight * settings.scale;
-    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  } 
-  else {
+    printf("Scaled loadedFileWidth:%f loadedFileHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
     settings.scale = 1;
-  }
+  } 
 
-  settings.shiftX = settings.xMarginLeft + settings.xInsetLeft;
-  settings.shiftY = settings.yMarginTop + settings.yInsetTop;
+  settings.shiftX = settings.xMarginLeft + (settings.xInsetLeft*settings.scale);
+  settings.shiftY = settings.yMarginTop + (settings.yInsetTop*settings.scale);
   settings.centerOnMaterial = generationConfig[1];
 
   // If centering on material, calculate shift
@@ -1116,7 +1114,7 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
      *writeReason = 0;
-    return 0;
+    //return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
