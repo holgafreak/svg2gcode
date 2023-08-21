@@ -764,7 +764,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
   printf("Fit to material: %d\n", settings.fitToMaterial);
 
-  // This needs a re-think
+  // This needs a re-think for scaling to viewbox e.t.c.
   if (settings.fitToMaterial) { //If scaling up or down to drawSpace.
     printf("FitToMat\n");
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
@@ -845,6 +845,10 @@ void printTransformSettings(TransformSettings settings) {
   printf("xmarginright: %f\n", settings.xMarginRight);
   printf("ymargintop: %f\n", settings.yMarginTop);
   printf("ymarginbottom: %f\n", settings.yMarginBottom);
+  printf("xInsetLeft: %f\n", settings.xInsetLeft);
+  printf("xInsetRight: %f\n", settings.xInsetRight);
+  printf("yInsetTop: %f\n", settings.yInsetTop);
+  printf("yInsetBottom: %f\n", settings.yInsetBottom);
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
