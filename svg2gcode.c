@@ -1114,7 +1114,7 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
      *writeReason = 0;
-    //return 0;
+    return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
