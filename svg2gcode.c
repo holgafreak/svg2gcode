@@ -759,6 +759,15 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.yInsetTop = bounds[1] - g_image->viewMiny; // Top side
   settings.yInsetBottom = (g_image->viewMiny + g_image->viewHeight) - bounds[3]; // Bottom side
 
+  for (int i = 0; i < settings.svgRotation; i++) {
+    float tempInset = settings.xInsetLeft;
+    settings.xInsetLeft = settings.yInsetBottom;
+    settings.yInsetBottom = settings.xInsetRight;
+    settings.xInsetRight = settings.yInsetTop;
+    settings.yInsetTop = tempInset;
+  }
+
+
   // Determine if fitting to material is necessary
   // If file is too large, or we selected to fitToMaterial.
   settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
@@ -785,7 +794,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.loadedFileHeight = pointsHeight * settings.scale;
     printf("Scaled loadedFileWidth:%f loadedFileHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
     settings.scale = 1;
-  } 
+  }
 
   settings.shiftX = settings.xMarginLeft + (settings.xInsetLeft*settings.scale);
   settings.shiftY = settings.yMarginTop + (settings.yInsetTop*settings.scale);
