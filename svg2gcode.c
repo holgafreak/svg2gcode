@@ -36,14 +36,13 @@
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
+
 #include <float.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include "svg2gcode.h"
-#include <math.h>
+
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
@@ -57,7 +56,9 @@
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.1 //in mm
 
-
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 
