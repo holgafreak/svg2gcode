@@ -2401,8 +2401,10 @@ static void nsvg__parseSVG(NSVGparser* p, const char** attr)
 	for (i = 0; attr[i]; i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
 			if (strcmp(attr[i], "width") == 0) {
+        fprintf(stdout, "Width found in nsvg__parseSVG\n");
 				p->image->width = nsvg__parseCoordinate(p, attr[i + 1], 0.0f, 0.0f);
 			} else if (strcmp(attr[i], "height") == 0) {
+        fprintf(stdout, "Height found in nsvg__parseSVG\n");
 				p->image->height = nsvg__parseCoordinate(p, attr[i + 1], 0.0f, 0.0f);
 			} else if (strcmp(attr[i], "viewBox") == 0) {
 				const char *s = attr[i + 1];
@@ -2711,10 +2713,14 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 			p->viewHeight = bounds[3] - bounds[1];
 		}
 	}
-	if (p->image->width == 0)
-		p->image->width = p->viewWidth;
-	if (p->image->height == 0)
-		p->image->height = p->viewHeight;
+	if (p->image->width == 0){
+    printf("Setting image width to view width in nsvg__scaleToViewbox\n");
+    p->image->width = p->viewWidth;
+  }
+	if (p->image->height == 0){
+    printf("Setting image height to view height in nsvg__scaleToViewbox\n");
+    p->image->height = p->viewHeight;
+  }
 
 	tx = -p->viewMinx;
 	ty = -p->viewMiny;
