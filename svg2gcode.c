@@ -739,8 +739,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   printf("Viewbox info from g_image: viewMinx: %f, viewMiny: %f, viewWidth: %f, viewHeight: %f, alignType: %d\n", g_image->viewMinx, g_image->viewMiny, g_image->viewWidth, g_image->viewHeight, g_image->alignType);
 
-  printf("Image width:%f Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
+  printf("Image width:%f, Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+  printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
   printf("PaperDimensions X:%f, PaperDimension Y:%f\n",paperDimensions[0], paperDimensions[1]);
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
 
@@ -780,25 +780,27 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-    printf("Scale%f\n", settings.scale);
+    printf("Scale: %f\n", settings.scale);
     settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
     settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    printf("Scaled loadedFileWidth:%f loadedFileHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    printf("Scaled loadedFileWidth: %f, Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   } 
   else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
     printf("!FitToMat\n");
-    float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
-    float pointsRatio = pointsWidth / pointsHeight;
-    settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
-    printf("Scale%f\n", settings.scale);
-    settings.loadedFileWidth = pointsWidth * settings.scale;
-    settings.loadedFileHeight = pointsHeight * settings.scale;
-    printf("Scaled loadedFileWidth:%f loadedFileHeight:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    // float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
+    // float pointsRatio = pointsWidth / pointsHeight;
+    //settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
+
     settings.scale = 1;
+    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+    
+    printf("Scale%f\n", settings.scale);
+    printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   }
 
-  settings.shiftX = settings.xMarginLeft + (settings.xInsetLeft*settings.scale);
-  settings.shiftY = settings.yMarginTop + (settings.yInsetTop*settings.scale);
+  settings.shiftX = settings.xMarginLeft;// + (settings.xInsetLeft*settings.scale);
+  settings.shiftY = settings.yMarginTop;// + (settings.yInsetTop*settings.scale);
   settings.centerOnMaterial = generationConfig[1];
 
   // If centering on material, calculate shift
@@ -807,7 +809,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
       settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
-
+ 
   // Calculate center of scaled and rotated drawing. 
   settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
   settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
