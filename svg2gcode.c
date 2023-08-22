@@ -1448,7 +1448,7 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
   printf("File open string: %s\n", argv[optind]);
   printf("File output string: %s\n", argv[optind+1]);
-  g_image = nsvgParseFromFile(argv[optind], "px", 96);
+  g_image = nsvgParseFromFile(argv[optind], "mm", 96);
   if(g_image == NULL) {
     printf("error: Can't open input %s\n",argv[optind]);
     return -1;
