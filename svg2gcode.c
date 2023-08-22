@@ -36,14 +36,13 @@
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
+
 #include <float.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include "svg2gcode.h"
-#include <math.h>
+
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
@@ -57,7 +56,9 @@
 #define NUM_TOOLS 6
 #define DOUGLAS_PEUCKER_EPSILON 0.1 //in mm
 
-
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 
@@ -66,7 +67,7 @@ static int sixColorWidth = 306;
 static float minf(float a, float b) { return a < b ? a : b; }
 static float maxf(float a, float b) { return a > b ? a : b; }
 static int numTools = 6;
-static float bounds[4];
+float bounds[4];
 static int pathCount,pointsCount,shapeCount;
 static struct NSVGimage* g_image = NULL;
 int numCompOut = 0;
@@ -105,6 +106,12 @@ typedef struct TransformSettings {
     float drawingHeight;
     float drawSpaceWidth;
     float drawSpaceHeight;
+    float loadedFileWidth;
+    float loadedFileHeight;
+    float xInsetLeft;
+    float yInsetTop;
+    float xInsetRight;
+    float yInsetBottom;
     float shiftX;
     float shiftY;
     float centerX;
@@ -711,88 +718,106 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
 
-  settings.pointBounds = bounds;
-  //bounds of points
-  float pointsWidth = bounds[2] - bounds[0];
-  float pointsHeight = bounds[3] - bounds[1];
-
-  //document dimensions
-  float width = g_image->width;
-  float height = g_image->height;
-  printf("Image width:%f Image Height:%f\n", width, height);
-  printf("Points wdith:%f Points height:%f\n", pointsWidth, pointsHeight);
-
-  // settings.pointsToDocumentScale = 1;
-  // if((pointsWidth > width) || (pointsHeight > height)){ //If we need to scale the points to the parsed document bounds.
-  //   float pointsRatio = pointsWidth/pointsHeight; //scaling from
-  //   float imageRatio = width/height; //scaling to
-  //   settings.pointsToDocumentScale = (imageRatio > pointsRatio) ? (height / pointsHeight) : (width / pointsWidth);
-  //   printf("Points to doc scale: %f\n", settings.pointsToDocumentScale);
-  // }
+  //Width and height of the document in mm.
+  float width = paperDimensions[9];
+  float height = paperDimensions[10];
   settings.pointsToDocumentScale = 1;
 
-  settings.svgRotation = generationConfig[2];
-  settings.xMarginLeft = paperDimensions[2];
+  settings.loadedFileWidth = width; //Width and height of svg from frontend.
+  settings.loadedFileHeight = height;
+  settings.svgRotation = generationConfig[2]; //Rotation amount /90
+  settings.xMarginLeft = paperDimensions[2]; //Margins
   settings.yMarginTop = paperDimensions[3];
   settings.xMarginRight = paperDimensions[7];
   settings.yMarginBottom = paperDimensions[8];
-  //scaling + fitting operations.
-  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight;
+  settings.drawSpaceWidth = paperDimensions[0] - settings.xMarginLeft - settings.xMarginRight; //Amount of space for drawing.
   settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
+  settings.pointBounds = bounds; //[xmin, ymin, xmax, ymax] bounding box of points in doc.
+  //bounds of points
+  float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
+  float pointsHeight = bounds[3] - bounds[1];
+
+  printf("Viewbox info from g_image: viewMinx: %f, viewMiny: %f, viewWidth: %f, viewHeight: %f, alignType: %d\n", g_image->viewMinx, g_image->viewMiny, g_image->viewWidth, g_image->viewHeight, g_image->alignType);
+
+  printf("Image width:%f, Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+  printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
   printf("PaperDimensions X:%f, PaperDimension Y:%f\n",paperDimensions[0], paperDimensions[1]);
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
+
   settings.swapDim = (generationConfig[2] == 1 || generationConfig[2] == 3);
 
   // Swap width and height if necessary
   if (settings.swapDim) {
-    float temp = width;
-    width = height;
-    height = temp;
-    printf("Swapped image width:%f Image Height:%f\n", width, height);
+    float temp = settings.loadedFileWidth;
+    settings.loadedFileWidth = settings.loadedFileHeight;
+    settings.loadedFileHeight = temp;
+    printf("Swapped image width:%f Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   }
-  settings.drawingWidth = width;
-  settings.drawingHeight = height;
-  printf("DrawingWidth:%f, DrawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
 
-#ifdef DEBUG_OUTPUT
-  printf("Fit To Mat from Config = %i\n", generationConfig[0]);
-#endif
+  //assume g_image->alignType = 0 for now. Currently inset values are not scaled to paper dimensions.
+  settings.xInsetLeft = bounds[0] - g_image->viewMinx; // Left side of point bounding box distance from viewbox
+  settings.xInsetRight = (g_image->viewMinx + g_image->viewWidth) - bounds[2]; // Right side
+  settings.yInsetTop = bounds[1] - g_image->viewMiny; // Top side
+  settings.yInsetBottom = (g_image->viewMiny + g_image->viewHeight) - bounds[3]; // Bottom side
+
+  for (int i = 0; i < settings.svgRotation; i++) {
+    float tempInset = settings.xInsetLeft;
+    settings.xInsetLeft = settings.yInsetBottom;
+    settings.yInsetBottom = settings.xInsetRight;
+    settings.xInsetRight = settings.yInsetTop;
+    settings.yInsetTop = tempInset;
+  }
+
+
   // Determine if fitting to material is necessary
-  settings.fitToMaterial = ((settings.drawingWidth > settings.drawSpaceWidth) || (settings.drawingHeight > settings.drawSpaceHeight) || generationConfig[0]);
-  printf("DrawingWidth: %f, DrawingHeight: %f, DrawSpaceHeight: %f, DrawSpaceWidth: %f, FitToMaterial %d\n", settings.drawingWidth, settings.drawingHeight, settings.drawSpaceWidth, settings.drawSpaceHeight, settings.fitToMaterial);
+  // If file is too large, or we selected to fitToMaterial.
+  settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
+  printf("Fit to material: %d\n", settings.fitToMaterial);
 
-  // If fitting to material, calculate scale and new drawing dimensions
-  if (settings.fitToMaterial) {
+  // This needs a re-think for scaling to viewbox e.t.c.
+  if (settings.fitToMaterial) { //If scaling up or down to drawSpace.
+    printf("FitToMat\n");
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
-    float svgRatio = width / height; //scaling from
-    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / height) : (settings.drawSpaceWidth / width);
-    printf("Scale%f\n", settings.scale);
-    settings.drawingWidth = width * settings.scale;
-    settings.drawingHeight = height * settings.scale;
-    printf("Scaled drawingWidth:%f drawingHeight:%f\n", settings.drawingWidth, settings.drawingHeight);
-    settings.shiftX = settings.xMarginLeft;
-    settings.shiftY = settings.yMarginTop;
-  } else {
+    float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling from
+    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
+    printf("Scale: %f\n", settings.scale);
+    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+    printf("Scaled loadedFileWidth: %f, Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+  } 
+  else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
+    printf("!FitToMat\n");
+    // float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
+    // float pointsRatio = pointsWidth / pointsHeight;
+    //settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
+
     settings.scale = 1;
+    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+    
+    printf("Scale%f\n", settings.scale);
+    printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   }
 
+  settings.shiftX = settings.xMarginLeft;// + (settings.xInsetLeft*settings.scale);
+  settings.shiftY = settings.yMarginTop;// + (settings.yInsetTop*settings.scale);
   settings.centerOnMaterial = generationConfig[1];
 
   // If centering on material, calculate shift
   if (settings.centerOnMaterial) {
-      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.drawingWidth) / 2);
-      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.drawingHeight) / 2);
+      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
+      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
-
+ 
   // Calculate center of scaled and rotated drawing. 
-  settings.centerX = settings.shiftX + settings.drawingWidth / 2;
-  settings.centerY = settings.shiftY + settings.drawingHeight / 2;
+  settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
+  settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
   settings.originalCenterX = settings.centerX;
   settings.originalCenterY = settings.centerY;
   if(settings.swapDim){
-    settings.originalCenterX = settings.shiftX + settings.drawingHeight/2;
-    settings.originalCenterY = settings.shiftY + settings.drawingWidth/2;
+    settings.originalCenterX = settings.shiftX + settings.loadedFileHeight/2;
+    settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
   }
 
   printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
@@ -812,10 +837,12 @@ void printTransformSettings(TransformSettings settings) {
   }
   printf("\nscale: %f\n", settings.scale);
   printf("pointsToDocumentScale: %f\n", settings.pointsToDocumentScale);
-  printf("drawingWidth: %f\n", settings.drawingWidth);
-  printf("drawingHeight: %f\n", settings.drawingHeight);
+  printf("drawingWidth: %f\n", settings.loadedFileWidth);
+  printf("drawingHeight: %f\n", settings.loadedFileHeight);
   printf("drawSpaceWidth: %f\n", settings.drawSpaceWidth);
   printf("drawSpaceHeight: %f\n", settings.drawSpaceHeight);
+  printf("loadedFileWidth: %f\n", settings.loadedFileWidth);
+  printf("loadedFileHeight: %f\n", settings.loadedFileHeight);
   printf("shiftX: %f\n", settings.shiftX);
   printf("shiftY: %f\n", settings.shiftY);
   printf("centerX: %f\n", settings.centerX);
@@ -828,6 +855,10 @@ void printTransformSettings(TransformSettings settings) {
   printf("xmarginright: %f\n", settings.xMarginRight);
   printf("ymargintop: %f\n", settings.yMarginTop);
   printf("ymarginbottom: %f\n", settings.yMarginBottom);
+  printf("xInsetLeft: %f\n", settings.xInsetLeft);
+  printf("xInsetRight: %f\n", settings.xInsetRight);
+  printf("yInsetTop: %f\n", settings.yInsetTop);
+  printf("yInsetBottom: %f\n", settings.yInsetBottom);
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
