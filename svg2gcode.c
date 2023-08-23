@@ -128,6 +128,7 @@ typedef struct TransformSettings {
     int centerOnMaterial;
     int swapDim;
     int svgRotation;
+    int contentsToDrawspace;
     float* pointBounds;
 } TransformSettings;
 
@@ -719,6 +720,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   TransformSettings settings;
 
   //Width and height of the document in mm.
+  settings.contentsToDrawspace = generationConfig[10];
   float width = paperDimensions[9];
   float height = paperDimensions[10];
   settings.pointsToDocumentScale = 1;
@@ -734,13 +736,9 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.drawSpaceHeight = paperDimensions[1] - settings.yMarginTop - settings.yMarginBottom;
   settings.pointBounds = bounds; //[xmin, ymin, xmax, ymax] bounding box of points in doc.
   //bounds of points
-  float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
-  float pointsHeight = bounds[3] - bounds[1];
-
+  
   printf("Viewbox info from g_image: viewMinx: %f, viewMiny: %f, viewWidth: %f, viewHeight: %f, alignType: %d\n", g_image->viewMinx, g_image->viewMiny, g_image->viewWidth, g_image->viewHeight, g_image->alignType);
-
   printf("Image width:%f, Image Height:%f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
   printf("PaperDimensions X:%f, PaperDimension Y:%f\n",paperDimensions[0], paperDimensions[1]);
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
 
@@ -774,31 +772,44 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
   printf("Fit to material: %d\n", settings.fitToMaterial);
 
+  //SCALE CALCULATIONS
+
+  if (settings.contentsToDrawspace){ //Need to set points to document scale, then scale document to size. Or maybe just points to document scale can be points to draw space.
+    printf("Forcing scale to drawSpace\n");
+    settings.scale = 1;
+    float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
+    float pointsHeight = bounds[3] - bounds[1];
+    printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
+    float pointsRatio = pointsWidth / pointsHeight;
+    float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+    settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
+    
+    goto forcedScale;
+  }
+
   // This needs a re-think for scaling to viewbox e.t.c.
   if (settings.fitToMaterial) { //If scaling up or down to drawSpace.
     printf("FitToMat\n");
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-    printf("Scale: %f\n", settings.scale);
-    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
-    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    printf("Scaled loadedFileWidth: %f, Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  } 
-  else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
+
+  } else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
     printf("!FitToMat\n");
     // float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
     // float pointsRatio = pointsWidth / pointsHeight;
     //settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
 
     settings.scale = 1;
-    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
-    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    
-    printf("Scale%f\n", settings.scale);
-    printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   }
 
+  forcedScale:
+  //END SCALE CALCULATIONS
+  printf("Scale%f\n", settings.scale);
+
+  settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+  settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+  printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
   settings.shiftX = settings.xMarginLeft;// + (settings.xInsetLeft*settings.scale);
   settings.shiftY = settings.yMarginTop;// + (settings.yInsetTop*settings.scale);
   settings.centerOnMaterial = generationConfig[1];
@@ -862,7 +873,8 @@ void printTransformSettings(TransformSettings settings) {
   printf("fitToMaterial: %d\n", settings.fitToMaterial);
   printf("centerOnMaterial: %d\n", settings.centerOnMaterial);
   printf("swapDim: %d\n", settings.swapDim);
-  printf("svgRotation: %d\n\n", settings.svgRotation);
+  printf("svgRotation: %d\n", settings.svgRotation);
+  printf("contentsToDrawspace: %d\n\n", settings.contentsToDrawspace);
 }
 
 float rotateX(TransformSettings* settings, float firstx, float firsty) {
@@ -1402,7 +1414,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[10], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[11], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
