@@ -793,20 +793,19 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling from
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-    printf("Scale: %f\n", settings.scale);
-  } 
-  else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
+
+  } else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
     printf("!FitToMat\n");
     // float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
     // float pointsRatio = pointsWidth / pointsHeight;
     //settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
 
     settings.scale = 1;
-    printf("Scale%f\n", settings.scale);
   }
 
   forcedScale:
   //END SCALE CALCULATIONS
+  printf("Scale%f\n", settings.scale);
 
   settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
   settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
