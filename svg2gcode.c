@@ -1019,8 +1019,10 @@ char* uint_to_hex_string(unsigned int num) {
     return result;
 }
 
-void writeToolOffset(GCodeState* gcodeState, FILE* gcode, int tool){
-  fprintf(gcode, "( TOOL OFFSET PLACEHOLDER )\n");
+void writeToolOffset(FILE* gcode, int tool){
+  fprintf(gcode, "( TOOL OFFSET CMD )\n");
+  int offset = 54 + tool;
+  fprintf(gcode, "G%d\n", offset);
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
@@ -1079,7 +1081,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
       gcodeState->currTool = gcodeState->targetTool;
-      writeToolOffset(gcodeState, gcode, gcodeState->currTool);
+      writeToolOffset(gcode, gcodeState->currTool);
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
