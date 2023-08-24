@@ -766,7 +766,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.yInsetTop = tempInset;
   }
 
-
   // Determine if fitting to material is necessary
   // If file is too large, or we selected to fitToMaterial.
   settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
@@ -779,10 +778,18 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.scale = 1;
     float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
     float pointsHeight = bounds[3] - bounds[1];
+    if(settings.swapDim){
+      printf("Swapping points dim in contents to drawspace\n");
+      float temp = pointsWidth;
+      pointsWidth = pointsHeight;
+      pointsHeight = temp;
+    }
     printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
     float pointsRatio = pointsWidth / pointsHeight;
     float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
+    settings.loadedFileWidth = pointsWidth;
+    settings.loadedFileHeight = pointsHeight;
     
     goto forcedScale;
   }
@@ -796,9 +803,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   } else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
     printf("!FitToMat\n");
-    // float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling to
-    // float pointsRatio = pointsWidth / pointsHeight;
-    //settings.scale = (svgRatio / pointsRatio) ? (settings.loadedFileHeight / pointsHeight) : (settings.loadedFileWidth / pointsWidth);
 
     settings.scale = 1;
   }
