@@ -1019,6 +1019,10 @@ char* uint_to_hex_string(unsigned int num) {
     return result;
 }
 
+void writeToolOffset(GCodeState* gcodeState, FILE* gcode, int tool){
+  fprintf(gcode, "( TOOL OFFSET PLACEHOLDER )\n");
+}
+
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
   if(machineType == 0 || machineType == 2 || machineType == 1){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
@@ -1074,8 +1078,8 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
       }
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
-      //
       gcodeState->currTool = gcodeState->targetTool;
+      writeToolOffset(gcodeState, gcode, gcodeState->currTool);
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
