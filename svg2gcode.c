@@ -173,6 +173,7 @@ typedef struct GCodeState {
     int colorToFile;
     int colorFileOpen;
     int colorCount;
+    int useToolOffsets;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -978,6 +979,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   }
 
   state.colorToFile = (state.colorCount > 1) && generationConfig[9];
+  state.useToolOffsets = 0;
 
   return state;
 }
