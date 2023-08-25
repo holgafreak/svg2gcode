@@ -981,6 +981,9 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
 
   state.colorToFile = (state.colorCount > 1) && generationConfig[9];
   state.useToolOffsets = generationConfig[11];
+  if(state.useToolOffsets){
+    state.zFloor = 0;
+  }
 
   return state;
 }
