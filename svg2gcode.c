@@ -1056,6 +1056,9 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
   printf("    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
   fflush(stdout);
 #endif
+      if(gcodeState->useToolOffsets){ //Back to absolute position for toolchanges
+        fprintf(gcode, "G53\n");
+      }
 
       if(machineType == 0){ //Tool change routine for 6-Color rotary.
         if(gcodeState->currTool >= 0){
@@ -1082,10 +1085,14 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
       }
+      
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
       gcodeState->currTool = gcodeState->targetTool;
-      writeToolOffset(gcode, gcodeState->currTool);
+      if(gcodeState->useToolOffsets){ //Back to new tool offset when using offsets.
+        writeToolOffset(gcode, gcodeState->currTool);
+      }
+      
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
