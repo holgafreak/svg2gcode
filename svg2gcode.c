@@ -173,6 +173,7 @@ typedef struct GCodeState {
     int colorToFile;
     int colorFileOpen;
     int colorCount;
+    int useToolOffsets;
 } GCodeState;
 
 SVGPoint bezPoints[MAX_BEZ];
@@ -921,6 +922,7 @@ void printGCodeState(GCodeState* state) {
   printf("yold: %f\n", state->yold);
   printf("colorCount: %d\n", state->colorCount);
   printf("colorToFile: %d\n", state->colorToFile);
+  printf("useToolOffsets: %d\n", state->useToolOffsets);
   printf("\n");  // End with newline
 }
 
@@ -978,6 +980,10 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   }
 
   state.colorToFile = (state.colorCount > 1) && generationConfig[9];
+  state.useToolOffsets = generationConfig[11];
+  if(state.useToolOffsets){
+    state.zFloor = 0;
+  }
 
   return state;
 }
@@ -1017,6 +1023,12 @@ char* uint_to_hex_string(unsigned int num) {
     return result;
 }
 
+void writeToolOffset(FILE* gcode, int tool){
+  fprintf(gcode, "( TOOL OFFSET CMD )\n");
+  int offset = 54 + tool;
+  fprintf(gcode, "G%d\n", offset);
+}
+
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
   if(machineType == 0 || machineType == 2 || machineType == 1){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
@@ -1044,6 +1056,9 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
   printf("    ( Current Tool:%d, Target Tool:%d )\n", gcodeState->currTool, gcodeState->targetTool);
   fflush(stdout);
 #endif
+      if(gcodeState->useToolOffsets){ //Back to absolute position for toolchanges
+        fprintf(gcode, "G53\n");
+      }
 
       if(machineType == 0){ //Tool change routine for 6-Color rotary.
         if(gcodeState->currTool >= 0){
@@ -1070,10 +1085,14 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
       }
+      
       toolUp(gcode, gcodeState, &machineType);
       gcodeState->x = 0;
-      //
       gcodeState->currTool = gcodeState->targetTool;
+      if(gcodeState->useToolOffsets){ //Back to new tool offset when using offsets.
+        writeToolOffset(gcode, gcodeState->currTool);
+      }
+      
 #ifdef DEBUG_OUTPUT
       fprintf(gcode, "    ( Ending Toolchange )\n");
 #endif
@@ -1081,7 +1100,6 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
   }
   fflush(stdout);
 }
-
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
   if (machineType == 0){ //Lift to zero for tool dropoff after job
@@ -1418,7 +1436,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[11], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[12], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
