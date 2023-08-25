@@ -922,6 +922,7 @@ void printGCodeState(GCodeState* state) {
   printf("yold: %f\n", state->yold);
   printf("colorCount: %d\n", state->colorCount);
   printf("colorToFile: %d\n", state->colorToFile);
+  printf("useToolOffsets: %d\n", state->useToolOffsets);
   printf("\n");  // End with newline
 }
 
@@ -979,7 +980,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   }
 
   state.colorToFile = (state.colorCount > 1) && generationConfig[9];
-  state.useToolOffsets = 0;
+  state.useToolOffsets = generationConfig[11];
 
   return state;
 }
@@ -1089,7 +1090,6 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
   }
   fflush(stdout);
 }
-
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
   if (machineType == 0){ //Lift to zero for tool dropoff after job
@@ -1426,7 +1426,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[11], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[12], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
