@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -836,17 +836,17 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
   }
 
+  if(settings.contentsToDrawspace){ //need to apply a shift when scaling contents to drawspace.
+    settings.shiftX -= (settings.xInsetLeft * settings.scale);
+    settings.shiftY -= (settings.yInsetTop * settings.scale);
+  }
+
   printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
   printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
   fflush(stdout);
 
   settings.cosRot = cos((90*settings.svgRotation)*(M_PI/180)); 
   settings.sinRot = sin((90*settings.svgRotation)*(M_PI/180));
-
-  // if(!settings.contentsToDrawspace){ //Apply insets if not scaling contents to drawspace.
-  //   settings.shiftX += settings.xInsetLeft * settings.scale;
-  //   settings.shiftY += settings.yInsetTop * settings.scale;
-  // }
 
   return settings;
 }
