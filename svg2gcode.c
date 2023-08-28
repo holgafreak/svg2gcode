@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -539,10 +539,10 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     int index = -1;
 
     //First and last point in divided segment.
-    float x1 = (points[startIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
-    float y1 = (points[startIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
-    float x2 = (points[endIndex]) * (settings->scale) * (settings->pointsToDocumentScale);
-    float y2 = (points[endIndex + 1]) * (settings->scale) * (settings->pointsToDocumentScale);
+    float x1 = (points[startIndex]) * (settings->scale);
+    float y1 = (points[startIndex + 1]) * (settings->scale);
+    float x2 = (points[endIndex]) * (settings->scale);
+    float y2 = (points[endIndex + 1]) * (settings->scale);
 
     //if start and end of shape are in same location, handle this special case.
     if(x1 == x2 && y1 == y2 && startIndex == 0 && endIndex == *pathPointsIndex -2){
@@ -552,8 +552,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
       float maxDist = 0;
       int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
-        float checkX = points[i] *settings->scale * (settings->pointsToDocumentScale);
-        float checkY = points[i+1] * settings->scale * (settings->pointsToDocumentScale);
+        float checkX = points[i] *settings->scale;
+        float checkY = points[i+1] * settings->scale;
         float dist = distanceBetweenPoints(x1, y1, checkX, checkY);
         if(dist > maxDist){
           maxDist = dist;
@@ -564,8 +564,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = (points[startIndex] - bounds[0])* settings->pointsToDocumentScale; //x 
-        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale; //y
+        buffer[*bufferIndex] = (points[startIndex]);// - bounds[0]); //x 
+        buffer[*bufferIndex + 1] = (points[startIndex + 1]);// - bounds[1]); //y
         *bufferIndex += 2;
         return;
       } else {
@@ -581,8 +581,8 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
     //Get the perpendicular distance to pN from line between pStart pEnd.
     //Find the maximum index of such point and track the value.
     for(int i = startIndex + 2; i < endIndex; i += 2) {
-        float px = points[i] * settings->scale * (settings->pointsToDocumentScale);
-        float py = points[i + 1] * settings->scale * (settings->pointsToDocumentScale);
+        float px = points[i] * settings->scale;
+        float py = points[i + 1] * settings->scale;
         float d = distanceLineToPoint(px, py, x1, y1, x2, y2);
         if (d >= dmax) {
             index = i;
@@ -600,16 +600,16 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[startIndex], points[startIndex + 1]);
 #endif
-        buffer[*bufferIndex] = (points[startIndex] - bounds[0]) * settings->pointsToDocumentScale;
-        buffer[*bufferIndex + 1] = (points[startIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex] = (points[startIndex]);// - bounds[0]);
+        buffer[*bufferIndex + 1] = (points[startIndex + 1]);// - bounds[1]);
         *bufferIndex += 2;
     }
     if (endIndex == *pathPointsIndex - 2 && (*lastWritten == 0)) {
 #ifdef DP_DEBUG_OUTPUT
         fprintf(gcode, "( Writing Point to Buffer at Index: %d | X: %.4f, Y: %.4f )\n", *bufferIndex, points[endIndex], points[endIndex + 1]);
 #endif
-        buffer[*bufferIndex] = (points[endIndex] - bounds[0]) * settings->pointsToDocumentScale;
-        buffer[*bufferIndex + 1] = (points[endIndex + 1] - bounds[1]) * settings->pointsToDocumentScale;
+        buffer[*bufferIndex] = (points[endIndex]);// - bounds[0]);
+        buffer[*bufferIndex + 1] = (points[endIndex + 1]);// - bounds[1]);
         *bufferIndex += 2;
         *lastWritten = 1;
     }
@@ -755,9 +755,9 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   //assume g_image->alignType = 0 for now. Currently inset values are not scaled to paper dimensions.
   settings.xInsetLeft = bounds[0] - g_image->viewMinx; // Left side of point bounding box distance from viewbox
-  settings.xInsetRight = (g_image->viewMinx + g_image->viewWidth) - bounds[2]; // Right side
+  settings.xInsetRight = (g_image->width) - bounds[2]; // Right side
   settings.yInsetTop = bounds[1] - g_image->viewMiny; // Top side
-  settings.yInsetBottom = (g_image->viewMiny + g_image->viewHeight) - bounds[3]; // Bottom side
+  settings.yInsetBottom = (g_image->height) - bounds[3]; // Bottom side
 
   for (int i = 0; i < settings.svgRotation; i++) {
     float tempInset = settings.xInsetLeft;
@@ -825,7 +825,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
       settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
       printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
- 
+
   // Calculate center of scaled and rotated drawing. 
   settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
   settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
@@ -842,6 +842,11 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   settings.cosRot = cos((90*settings.svgRotation)*(M_PI/180)); 
   settings.sinRot = sin((90*settings.svgRotation)*(M_PI/180));
+
+  // if(!settings.contentsToDrawspace){ //Apply insets if not scaling contents to drawspace.
+  //   settings.shiftX += settings.xInsetLeft * settings.scale;
+  //   settings.shiftY += settings.yInsetTop * settings.scale;
+  // }
 
   return settings;
 }
@@ -1180,6 +1185,9 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     // Get the unscaled and unrotated coordinates from pathPoints
     float x = gcodeState->pathPoints[*ptIndex];
     float y = gcodeState->pathPoints[(*ptIndex)+1];
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Un-Rotated/Scaled X: %f, Y: %f )\n", x, y);
+#endif
     
     // Scale and shift the coordinates
     float scaledX = x*settings->scale + settings->shiftX;
@@ -1195,6 +1203,9 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     }
     rotatedY = -rotatedY;
     int writeReason = -1;
+#ifdef DEBUG_OUTPUT
+    fprintf(gcode, "( Scaled and Rotated X:%f Y:%f )\n", rotatedX, rotatedY);
+#endif
 
     if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
       gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
