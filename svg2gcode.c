@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -552,7 +552,7 @@ void DouglasPeucker(FILE * gcode, float *points, int startIndex, int endIndex, f
       float maxDist = 0;
       int maxIndex = -1;
       for(int i = startIndex + 2; i < endIndex - 2; i += 2){
-        float checkX = points[i] *settings->scale;
+        float checkX = points[i] * settings->scale;
         float checkY = points[i+1] * settings->scale;
         float dist = distanceBetweenPoints(x1, y1, checkX, checkY);
         if(dist > maxDist){
@@ -717,6 +717,93 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   fflush(stdout);
 }
 
+TransformSettings calculateScaleForContentsToDrawspace(TransformSettings settings, float* bounds) {
+    // code specific for contentsToDrawspace
+    printf("  Forcing scale to drawSpace\n");
+    settings.scale = 1;
+    float pointsWidth = bounds[2] - bounds[0];
+    float pointsHeight = bounds[3] - bounds[1];
+    if (settings.swapDim) {
+        printf("Swapping points dim in contents to drawspace\n");
+        float temp = pointsWidth;
+        pointsWidth = pointsHeight;
+        pointsHeight = temp;
+    }
+    printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
+    float pointsRatio = pointsWidth / pointsHeight;
+    float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+    settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
+    settings.loadedFileWidth = pointsWidth;
+    settings.loadedFileHeight = pointsHeight;
+    return settings;
+}
+
+TransformSettings calculateScaleForFitToMaterial(TransformSettings settings) {
+    // code specific for fitToMaterial
+    printf("  FitToMat\n");
+    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
+    float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight;
+    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
+    settings.shiftX = settings.xMarginLeft;
+    settings.shiftY = settings.yMarginTop;
+    if (settings.centerOnMaterial) {
+      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
+      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
+      printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
+  }
+
+
+  return settings;
+}
+
+TransformSettings calculateScaleForNotFitToMaterial(TransformSettings settings) {
+    // code specific for !fitToMaterial
+    printf("  Not FitToMat\n");
+    settings.scale = 1;
+    return settings;
+}
+
+TransformSettings calcShiftAndCenter(TransformSettings settings) {
+    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+    printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    settings.shiftX = settings.xMarginLeft; 
+    settings.shiftY = settings.yMarginTop;  
+
+    // If centering on material, calculate shift
+    if (settings.centerOnMaterial) {
+        settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
+        settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
+        printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
+    }
+
+    // Calculate center of scaled and rotated drawing. 
+    settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
+    settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
+    settings.originalCenterX = settings.centerX;
+    settings.originalCenterY = settings.centerY;
+
+    if(settings.swapDim) {
+        settings.originalCenterX = settings.shiftX + settings.loadedFileHeight/2;
+        settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
+    }
+
+    if(settings.contentsToDrawspace) { // Need to apply a shift when scaling contents to drawspace.
+        settings.shiftX -= (settings.xInsetLeft * settings.scale);
+        settings.shiftY -= (settings.yInsetTop * settings.scale);
+    }
+
+    printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
+    printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
+    fflush(stdout);
+
+    settings.cosRot = cos((90 * settings.svgRotation) * (M_PI / 180)); 
+    settings.sinRot = sin((90 * settings.svgRotation) * (M_PI / 180));
+
+    return settings;
+}
+
+//All calculations for shift and rotation are handled here.
 TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, int * generationConfig){
   TransformSettings settings;
 
@@ -771,82 +858,22 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   // If file is too large, or we selected to fitToMaterial.
   settings.fitToMaterial = ((settings.loadedFileWidth > settings.drawSpaceWidth) || (settings.loadedFileHeight > settings.drawSpaceHeight) || generationConfig[0]); 
   printf("Fit to material: %d\n", settings.fitToMaterial);
-
+  settings.centerOnMaterial = generationConfig[1];
   //SCALE CALCULATIONS
 
-  if (settings.contentsToDrawspace){ //Need to set points to document scale, then scale document to size. Or maybe just points to document scale can be points to draw space.
-    printf("Forcing scale to drawSpace\n");
-    settings.scale = 1;
-    float pointsWidth = bounds[2] - bounds[0]; //Width and height of bounding box of points in document (not scaled to paper size or viewbox size e.t.c.)
-    float pointsHeight = bounds[3] - bounds[1];
-    if(settings.swapDim){
-      printf("Swapping points dim in contents to drawspace\n");
-      float temp = pointsWidth;
-      pointsWidth = pointsHeight;
-      pointsHeight = temp;
-    }
-    printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
-    float pointsRatio = pointsWidth / pointsHeight;
-    float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
-    settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
-    settings.loadedFileWidth = pointsWidth;
-    settings.loadedFileHeight = pointsHeight;
-    
-    goto forcedScale;
+  if (settings.contentsToDrawspace) {
+    settings = calculateScaleForContentsToDrawspace(settings, bounds);
+    goto finish_calc;
+  } else if (settings.fitToMaterial) { //If fit to material is toggled or SVG is larger than draw space.
+    settings = calculateScaleForFitToMaterial(settings);
+  } else {
+    settings = calculateScaleForNotFitToMaterial(settings);
   }
 
-  // This needs a re-think for scaling to viewbox e.t.c.
-  if (settings.fitToMaterial) { //If scaling up or down to drawSpace.
-    printf("FitToMat\n");
-    float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight; //scaling to
-    float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight; //scaling from
-    settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-
-  } else if (!settings.fitToMaterial) { //need to scale the pointsWidth/pointsHeight to settings.loadedFileWidth/settings.loadedFileHeight
-    printf("!FitToMat\n");
-
-    settings.scale = 1;
-  }
-
-  forcedScale:
+  finish_calc:
   //END SCALE CALCULATIONS
   printf("Scale%f\n", settings.scale);
-
-  settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
-  settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-  printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-  settings.shiftX = settings.xMarginLeft;// + (settings.xInsetLeft*settings.scale);
-  settings.shiftY = settings.yMarginTop;// + (settings.yInsetTop*settings.scale);
-  settings.centerOnMaterial = generationConfig[1];
-
-  // If centering on material, calculate shift
-  if (settings.centerOnMaterial) {
-      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
-      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
-      printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
-  }
-
-  // Calculate center of scaled and rotated drawing. 
-  settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
-  settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
-  settings.originalCenterX = settings.centerX;
-  settings.originalCenterY = settings.centerY;
-  if(settings.swapDim){
-    settings.originalCenterX = settings.shiftX + settings.loadedFileHeight/2;
-    settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
-  }
-
-  if(settings.contentsToDrawspace){ //need to apply a shift when scaling contents to drawspace.
-    settings.shiftX -= (settings.xInsetLeft * settings.scale);
-    settings.shiftY -= (settings.yInsetTop * settings.scale);
-  }
-
-  printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
-  printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
-  fflush(stdout);
-
-  settings.cosRot = cos((90*settings.svgRotation)*(M_PI/180)); 
-  settings.sinRot = sin((90*settings.svgRotation)*(M_PI/180));
+  settings = calcShiftAndCenter(settings);
 
   return settings;
 }
@@ -1165,7 +1192,7 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
   if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
     gcodeState->pointsCulledBounds++;
      *writeReason = 0;
-    return 0;
+    return 1;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
@@ -1178,6 +1205,7 @@ int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcod
   return (!firstPoint(sp, ptIndex, pathPointIndex)) && (gcodeState->trackedDist + *dist > gcodeState->brushDist);
 }
 
+//Rotation/shifting application, and writing is handled in this function.
 void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
     float rotatedX, rotatedY, feedRate;
     float dist = 0.0;
