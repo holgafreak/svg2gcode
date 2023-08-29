@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -768,24 +768,27 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
     settings.shiftX = settings.xMarginLeft; 
     settings.shiftY = settings.yMarginTop;  
+    if(settings.contentsToDrawspace){
+      settings.shiftX -= bounds[0] * settings.scale;
+      settings.shiftY -= bounds[1] * settings.scale;
+    }
 
     // If centering on material, calculate shift
     if (settings.centerOnMaterial) {
-        settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
-        settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
+        settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth) /2;
+        settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight) /2;
         printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
     }
 
-    // Calculate center of scaled, shifted, and rotated drawing. 
+    // Calculate center of scaled, shifted, and rotated drawing.  Center is (probably) incorrect when calculating with contentsToDrawspace.
     settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
     settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
     settings.originalCenterX = settings.centerX;
     settings.originalCenterY = settings.centerY;
     if(settings.swapDim) {
-        settings.originalCenterX = settings.shiftX + settings.loadedFileHeight/2;
-        settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
+        settings.originalCenterX = settings.centerY;
+        settings.originalCenterY = settings.centerX;
     }
-    //just redo all calculations for if contentsToDrawspace down here. Can clean up "later"
 
     printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
     printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
@@ -857,7 +860,6 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
 
   if (settings.contentsToDrawspace) {
     settings = calculateScaleForContentsToDrawspace(settings, bounds);
-    goto finish_calc;
   } else if (settings.fitToMaterial) { //If fit to material is toggled or SVG is larger than draw space.
     settings = calculateScaleForFitToMaterial(settings);
   } else {
@@ -867,31 +869,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   //END SCALE CALCULATIONS
   printf("    Scale%f\n", settings.scale);
   settings = calcShiftAndCenter(settings);
-  finish_calc:
-  if(settings.contentsToDrawspace){ //Specific shift/center calcs here. Insets are important, currently not accounted for.
-    printf("Calculating shift + center in contentsToDrawspace\n");
-    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
-    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    settings.shiftX = settings.xMarginLeft - (bounds[0]*settings.scale); //Fitting to draw space, so bace shifts by margins.
-    settings.shiftY = settings.yMarginTop - (bounds[1]*settings.scale);
-    if(settings.centerOnMaterial){ //Should center the drawing. (Need to figure out how to account for insets.)
-      settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth) /2;
-      settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight) /2;
-    }
-    //Orignal (pre rotation) scaled and shifted centerpoints.
-    settings.centerX = settings.shiftX + settings.loadedFileWidth/2;
-    settings.centerY = settings.shiftY + settings.loadedFileHeight/2;
-    settings.originalCenterX = settings.centerX;
-    settings.originalCenterY = settings.centerY;
-    if(settings.swapDim){
-      settings.originalCenterX = settings.centerY;
-      settings.originalCenterY = settings.centerX;
-    }
-    settings.cosRot = cos((90 * settings.svgRotation) * (M_PI / 180)); 
-    settings.sinRot = sin((90 * settings.svgRotation) * (M_PI / 180));
-
-  }
-
+  
   return settings;
 }
 
