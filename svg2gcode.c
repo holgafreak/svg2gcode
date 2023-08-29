@@ -717,24 +717,15 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
   fflush(stdout);
 }
 
-TransformSettings calculateScaleForContentsToDrawspace(TransformSettings settings, float* bounds) {
+TransformSettings calculateScaleForContentsToDrawspace(TransformSettings settings, float* bounds, float pointsWidth, float pointsHeight) {
     // code specific for contentsToDrawspace
     printf("Forcing scale to drawSpace\n");
     //settings.scale = 1;
-    float pointsWidth = bounds[2] - bounds[0];
-    float pointsHeight = bounds[3] - bounds[1];
-    if (settings.swapDim) {
-        printf("  Swapping points dim in contents to drawspace\n");
-        float temp = pointsWidth;
-        pointsWidth = pointsHeight;
-        pointsHeight = temp;
-    }
-    printf("  Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
+    
+    printf("    Unscaled Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
     float pointsRatio = pointsWidth / pointsHeight;
     float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
-    settings.loadedFileWidth = pointsWidth;
-    settings.loadedFileHeight = pointsHeight;
     return settings;
 }
 
@@ -744,15 +735,7 @@ TransformSettings calculateScaleForFitToMaterial(TransformSettings settings) {
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight;
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
-    settings.shiftX = settings.xMarginLeft;
-    settings.shiftY = settings.yMarginTop;
-    if (settings.centerOnMaterial) {
-      settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
-      settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
-      printf("    shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
-  }
-
-  return settings;
+    return settings;
 }
 
 TransformSettings calculateScaleForNotFitToMaterial(TransformSettings settings) {
@@ -828,8 +811,14 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   printf("drawSpaceWidth: %f, drawSpaceHeight:%f\n", settings.drawSpaceWidth, settings.drawSpaceHeight);
 
   settings.swapDim = (generationConfig[2] == 1 || generationConfig[2] == 3);
+  float pointsWidth = bounds[2] - bounds[0];
+  float pointsHeight = bounds[3] - bounds[1];
+  if (settings.contentsToDrawspace){
+    settings.loadedFileWidth = pointsWidth;
+    settings.loadedFileHeight = pointsHeight;
+  }
 
-  // Swap width and height if necessary
+  // Swap width and height if necessary. Need to calc this for contentsToDrawspace outside of the scale calc function.
   if (settings.swapDim) {
     float temp = settings.loadedFileWidth;
     settings.loadedFileWidth = settings.loadedFileHeight;
@@ -859,7 +848,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   //SCALE CALCULATIONS
 
   if (settings.contentsToDrawspace) {
-    settings = calculateScaleForContentsToDrawspace(settings, bounds);
+    settings = calculateScaleForContentsToDrawspace(settings, bounds, pointsWidth, pointsHeight);
   } else if (settings.fitToMaterial) { //If fit to material is toggled or SVG is larger than draw space.
     settings = calculateScaleForFitToMaterial(settings);
   } else {
