@@ -719,17 +719,17 @@ void simulatedAnnealing(Shape* shapes, SVGPoint * points, int pathCount, double 
 
 TransformSettings calculateScaleForContentsToDrawspace(TransformSettings settings, float* bounds) {
     // code specific for contentsToDrawspace
-    printf("  Forcing scale to drawSpace\n");
-    settings.scale = 1;
+    printf("Forcing scale to drawSpace\n");
+    //settings.scale = 1;
     float pointsWidth = bounds[2] - bounds[0];
     float pointsHeight = bounds[3] - bounds[1];
     if (settings.swapDim) {
-        printf("Swapping points dim in contents to drawspace\n");
+        printf("  Swapping points dim in contents to drawspace\n");
         float temp = pointsWidth;
         pointsWidth = pointsHeight;
         pointsHeight = temp;
     }
-    printf("Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
+    printf("  Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
     float pointsRatio = pointsWidth / pointsHeight;
     float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
@@ -740,7 +740,7 @@ TransformSettings calculateScaleForContentsToDrawspace(TransformSettings setting
 
 TransformSettings calculateScaleForFitToMaterial(TransformSettings settings) {
     // code specific for fitToMaterial
-    printf("  FitToMat\n");
+    printf("FitToMat\n");
     float materialRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     float svgRatio = settings.loadedFileWidth / settings.loadedFileHeight;
     settings.scale = (materialRatio > svgRatio) ? (settings.drawSpaceHeight / settings.loadedFileHeight) : (settings.drawSpaceWidth / settings.loadedFileWidth);
@@ -749,16 +749,15 @@ TransformSettings calculateScaleForFitToMaterial(TransformSettings settings) {
     if (settings.centerOnMaterial) {
       settings.shiftX = settings.xMarginLeft + ((settings.drawSpaceWidth - settings.loadedFileWidth) / 2);
       settings.shiftY = settings.yMarginTop + ((settings.drawSpaceHeight - settings.loadedFileHeight) / 2);
-      printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
+      printf("    shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
   }
-
 
   return settings;
 }
 
 TransformSettings calculateScaleForNotFitToMaterial(TransformSettings settings) {
     // code specific for !fitToMaterial
-    printf("  Not FitToMat\n");
+    printf("Not FitToMat\n");
     settings.scale = 1;
     return settings;
 }
@@ -777,21 +776,16 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
         printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
     }
 
-    // Calculate center of scaled and rotated drawing. 
+    // Calculate center of scaled, shifted, and rotated drawing. 
     settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
     settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
     settings.originalCenterX = settings.centerX;
     settings.originalCenterY = settings.centerY;
-
     if(settings.swapDim) {
         settings.originalCenterX = settings.shiftX + settings.loadedFileHeight/2;
         settings.originalCenterY = settings.shiftY + settings.loadedFileWidth/2;
     }
-
-    if(settings.contentsToDrawspace) { // Need to apply a shift when scaling contents to drawspace.
-        settings.shiftX -= (settings.xInsetLeft * settings.scale);
-        settings.shiftY -= (settings.yInsetTop * settings.scale);
-    }
+    //just redo all calculations for if contentsToDrawspace down here. Can clean up "later"
 
     printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
     printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
@@ -870,10 +864,33 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
     settings = calculateScaleForNotFitToMaterial(settings);
   }
 
-  finish_calc:
   //END SCALE CALCULATIONS
-  printf("Scale%f\n", settings.scale);
+  printf("    Scale%f\n", settings.scale);
   settings = calcShiftAndCenter(settings);
+  finish_calc:
+  if(settings.contentsToDrawspace){ //Specific shift/center calcs here. Insets are important, currently not accounted for.
+    printf("Calculating shift + center in contentsToDrawspace\n");
+    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
+    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
+    settings.shiftX = settings.xMarginLeft - (bounds[0]*settings.scale); //Fitting to draw space, so bace shifts by margins.
+    settings.shiftY = settings.yMarginTop - (bounds[1]*settings.scale);
+    if(settings.centerOnMaterial){ //Should center the drawing. (Need to figure out how to account for insets.)
+      settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth) /2;
+      settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight) /2;
+    }
+    //Orignal (pre rotation) scaled and shifted centerpoints.
+    settings.centerX = settings.shiftX + settings.loadedFileWidth/2;
+    settings.centerY = settings.shiftY + settings.loadedFileHeight/2;
+    settings.originalCenterX = settings.centerX;
+    settings.originalCenterY = settings.centerY;
+    if(settings.swapDim){
+      settings.originalCenterX = settings.centerY;
+      settings.originalCenterY = settings.centerX;
+    }
+    settings.cosRot = cos((90 * settings.svgRotation) * (M_PI / 180)); 
+    settings.sinRot = sin((90 * settings.svgRotation) * (M_PI / 180));
+
+  }
 
   return settings;
 }
@@ -1216,7 +1233,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Un-Rotated/Scaled X: %f, Y: %f )\n", x, y);
 #endif
-    
+
     // Scale and shift the coordinates
     float scaledX = x*settings->scale + settings->shiftX;
     float scaledY = y*settings->scale + settings->shiftY;
