@@ -751,10 +751,6 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
     settings.shiftX = settings.xMarginLeft; 
     settings.shiftY = settings.yMarginTop;  
-    if(settings.contentsToDrawspace){
-      settings.shiftX -= bounds[0] * settings.scale;
-      settings.shiftY -= bounds[1] * settings.scale;
-    }
 
     // If centering on material, calculate shift
     if (settings.centerOnMaterial) {
@@ -770,13 +766,21 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
       settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
       settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
     }
+    
+    //REDO BELOW
+    //originalCenterX and originalCenterY may not correspond with centerX and centerY.
+    //this calculation needs to be rethought.
     settings.originalCenterX = settings.centerX;
     settings.originalCenterY = settings.centerY;
-    if(settings.swapDim && !settings.centerOnMaterial) { //Wont need to swap dimensions if centering on material.
+    if(settings.swapDim) { //Wont need to swap dimensions if centering on material.
         settings.originalCenterX = settings.centerY;
         settings.originalCenterY = settings.centerX;
     }
+    //REDO
 
+    //original centerX and original centerY are the points at which the scaled and shifted values are centered around
+    //before the rotation is applied. These may be the same as the final center points too (as in the case where center
+    //on material is true). Need a separate calc for centerX and centerY for correct translation back?
     printf("originalCenterX:%f, originalCenterY:%f\n", settings.originalCenterX, settings.originalCenterY);
     printf("centerX:%f, centerY:%f\n", settings.centerX, settings.centerY);
     fflush(stdout);
@@ -902,6 +906,7 @@ void printTransformSettings(TransformSettings settings) {
   printf("contentsToDrawspace: %d\n\n", settings.contentsToDrawspace);
 }
 
+//original coords are pre rotation scaled and shifted image center. Then shift back around final centerpoint centerX centerY
 float rotateX(TransformSettings* settings, float firstx, float firsty) {
   float rotatedX = (firstx - settings->originalCenterX) * settings->cosRot - (firsty - settings->originalCenterY) * settings->sinRot + settings->centerX;
   return rotatedX;
@@ -1557,8 +1562,10 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Debug Info for TransformationSettings ) \n");
-  fprintf(gcode, "  ( Calculated Center of Rotated + Scaled Drawing )\n,   ( X:%f, Y:%f )\n", settings.centerX, settings.centerY);
-  fprintf(gcode, "  ( Calculated Center for un-Rotated + un-Scaled drawing )\n,   ( X:%f, Y:%f )\n", settings.originalCenterX, settings.originalCenterY);
+  fprintf(gcode, "  ( Calculated Center of Rotated + Scaled Drawing )\n   ( X:%f, Y:%f )\n", settings.centerX, settings.centerY);
+  fprintf(gcode, "  ( Calculated Center for swapped if neccesary )\n   ( X:%f, Y:%f )\n", settings.originalCenterX, settings.originalCenterY);
+  fprintf(gcode, "  ( Xmin: %f, XMax: %f, YMin: %f, YMax: %f )\n", bounds[0], bounds[2], bounds[1], bounds[3]);
+  fprintf(gcode, "  ( DrawingWidth: %f, DrawingHeight: %f )\n", generationConfig[9], generationConfig[10]);
 #endif
 
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
