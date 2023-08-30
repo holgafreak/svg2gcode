@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -722,7 +722,7 @@ TransformSettings calculateScaleForContentsToDrawspace(TransformSettings setting
     printf("Forcing scale to drawSpace\n");
     //settings.scale = 1;
     
-    printf("    Unscaled Points wdith:%f, Points height:%f\n", pointsWidth, pointsHeight);
+    printf("    Unscaled Points width:%f, Points height:%f\n", pointsWidth, pointsHeight);
     float pointsRatio = pointsWidth / pointsHeight;
     float drawSpaceRatio = settings.drawSpaceWidth / settings.drawSpaceHeight;
     settings.scale = (drawSpaceRatio > pointsRatio) ? (settings.drawSpaceHeight / pointsHeight) : (settings.drawSpaceWidth / pointsWidth);
@@ -766,9 +766,13 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     // Calculate center of scaled, shifted, and rotated drawing.  Center is (probably) incorrect when calculating with contentsToDrawspace.
     settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
     settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
+    if(settings.centerOnMaterial){ //Center on material forces center of svg to center of draw space.
+      settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
+      settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
+    }
     settings.originalCenterX = settings.centerX;
     settings.originalCenterY = settings.centerY;
-    if(settings.swapDim) {
+    if(settings.swapDim && !settings.centerOnMaterial) { //Wont need to swap dimensions if centering on material.
         settings.originalCenterX = settings.centerY;
         settings.originalCenterY = settings.centerX;
     }
@@ -848,7 +852,7 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   //SCALE CALCULATIONS
 
   if (settings.contentsToDrawspace) {
-    settings = calculateScaleForContentsToDrawspace(settings, bounds, pointsWidth, pointsHeight);
+    settings = calculateScaleForContentsToDrawspace(settings, bounds, settings.loadedFileWidth, settings.loadedFileHeight);
   } else if (settings.fitToMaterial) { //If fit to material is toggled or SVG is larger than draw space.
     settings = calculateScaleForFitToMaterial(settings);
   } else {
@@ -1550,6 +1554,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
       printf("Failed to set buffer\n");
       return -1;
   }
+
+#ifdef DEBUG_OUTPUT
+  fprintf(gcode, "( Debug Info for TransformationSettings ) \n");
+  fprintf(gcode, "  ( Calculated Center of Rotated + Scaled Drawing )\n,   ( X:%f, Y:%f )\n", settings.centerX, settings.centerY);
+  fprintf(gcode, "  ( Calculated Center for un-Rotated + un-Scaled drawing )\n,   ( X:%f, Y:%f )\n", settings.originalCenterX, settings.originalCenterY);
+#endif
 
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
   toolPaths = (ToolPath*)malloc(pointsCount*sizeof(ToolPath));
