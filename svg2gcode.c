@@ -750,17 +750,12 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     printf("scale: %f\n", settings.scale);
     printf("xMarginLeft: %f, yMarginTop: %f\n", settings.xMarginLeft, settings.xMarginRight);
     //Use shifts in centerX and centerY calculations, not originalCenterX/Y calculations.
-    settings.shiftX = settings.xMarginLeft;
-    settings.shiftY = settings.yMarginTop;
-    //Will need to modify shift when contentsToDrawspace. Otherwise, should only have to shift
 
     //Calculating TARGET centerpoint for final drawing.
     if(settings.centerOnMaterial){ //Center on material forces center of svg to center of draw space.
       printf("Settings.centerOnMaterial == 1\n");
       settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
       settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
-      settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth*settings.scale)/2;
-      settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight*settings.scale)/2;
     } else { //If not centering the final point on material, centerpoint should be shift positions + 1/2 dimension.
              //Loaded file dimensions have already been scaled so this shoudl work for scaled coordinates.
       printf("Settings.centerOnMaterial == 0\n");
@@ -1217,11 +1212,9 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Un-Rotated/Un-Scaled X: %f, Y: %f )\n", raw_x, raw_y);
 #endif
-    raw_x -= settings->originalCenterX;
-    raw_y -= settings->originalCenterY;
 
-    x = rotateX(settings, raw_x, raw_y);
-    y = rotateY(settings, raw_x, raw_y);
+    x = rotateX(settings, raw_x - settings->originalCenterX, raw_y - settings->originalCenterY);
+    y = rotateY(settings, raw_x - settings->originalCenterX, raw_y - settings->originalCenterY);
 
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( unscaled/unshifted x: %f y: %f )\n", x, y);
