@@ -1204,17 +1204,13 @@ float rotateY(TransformSettings* settings, float x, float y) {
 void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
     float feedRate;
     float dist = 0.0;
-    float x, y;
     
-    // Get the unscaled and unrotated coordinates from pathPoints
-    float raw_x = gcodeState->pathPoints[*ptIndex];
-    float raw_y = gcodeState->pathPoints[(*ptIndex)+1];
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Un-Rotated/Un-Scaled X: %f, Y: %f )\n", raw_x, raw_y);
 #endif
 
-    x = rotateX(settings, raw_x - settings->originalCenterX, raw_y - settings->originalCenterY);
-    y = rotateY(settings, raw_x - settings->originalCenterX, raw_y - settings->originalCenterY);
+    float x = rotateX(settings, gcodeState->pathPoints[*ptIndex] - settings->originalCenterX, gcodeState->pathPoints[(*ptIndex)+1] - settings->originalCenterY);
+    float y = rotateY(settings, gcodeState->pathPoints[*ptIndex] - settings->originalCenterX, gcodeState->pathPoints[(*ptIndex)+1] - settings->originalCenterY);
 
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( unscaled/unshifted x: %f y: %f )\n", x, y);
