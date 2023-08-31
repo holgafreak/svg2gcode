@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 #define BTSVG
 #define MAX_BEZ 128 //64;
@@ -772,6 +772,11 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     //FINDING CENTERPOINT OF PARSED DOCUMENT.
     settings.originalCenterX = settings.loadedFileWidth/2;
     settings.originalCenterY = settings.loadedFileHeight/2;
+    if(settings.swapDim){
+      float tempCent = settings.originalCenterX;
+      settings.originalCenterX = settings.originalCenterY;
+      settings.originalCenterY = tempCent;
+    }
 
     //REDO
 
