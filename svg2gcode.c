@@ -746,43 +746,35 @@ TransformSettings calculateScaleForNotFitToMaterial(TransformSettings settings) 
 }
 
 TransformSettings calcShiftAndCenter(TransformSettings settings) {
-    settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
-    settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
-    printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    printf("loadedFileWidth: %f loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
+    printf("scale: %f\n", settings.scale);
+    printf("xMarginLeft: %f, yMarginTop: %f\n", settings.xMarginLeft, settings.xMarginRight);
     //Use shifts in centerX and centerY calculations, not originalCenterX/Y calculations.
     settings.shiftX = settings.xMarginLeft;
     settings.shiftY = settings.yMarginTop;
     //Will need to modify shift when contentsToDrawspace. Otherwise, should only have to shift
-    
-    // If centering on material, calculate shift
-    if (settings.centerOnMaterial) {
-        settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth) /2;
-        settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight) /2;
-        printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
-    }
-    if(settings.swapDim){
-      float temp = settings.shiftX;
-      settings.shiftX = settings.shiftY;
-      settings.shiftY = temp;
-    }
 
     //Calculating TARGET centerpoint for final drawing.
     if(settings.centerOnMaterial){ //Center on material forces center of svg to center of draw space.
+      printf("Settings.centerOnMaterial == 1\n");
       settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
       settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
+      settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth*settings.scale)/2;
+      settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight*settings.scale)/2;
     } else { //If not centering the final point on material, centerpoint should be shift positions + 1/2 dimension.
              //Loaded file dimensions have already been scaled so this shoudl work for scaled coordinates.
-      settings.centerX = settings.shiftX + settings.loadedFileWidth/2;
-      settings.centerY = settings.shiftY + settings.loadedFileHeight/2;
+      printf("Settings.centerOnMaterial == 0\n");
+      settings.centerX = settings.xMarginLeft + (settings.loadedFileWidth/2 * settings.scale);
+      settings.centerY = settings.yMarginTop + (settings.loadedFileHeight/2 * settings.scale);
     }
-    if(settings.swapDim){ //need to adjust centerpoint when swapping dim by 90 or 270 degrees
+    if(settings.swapDim && !settings.centerOnMaterial){ //need to adjust centerpoint when swapping dim by 90 or 270 degrees
       float temp = settings.centerX;
       settings.centerX = settings.centerY;
       settings.centerY = temp;
     }
     
     //REDO BELOW
-    //FINDING CENTERPOINT OF PARSED DOCUMENT. SCALED BUT NOT SHIFTED.
+    //FINDING CENTERPOINT OF PARSED DOCUMENT.
     settings.originalCenterX = settings.loadedFileWidth/2;
     settings.originalCenterY = settings.loadedFileHeight/2;
 
@@ -914,17 +906,6 @@ void printTransformSettings(TransformSettings settings) {
   printf("swapDim: %d\n", settings.swapDim);
   printf("svgRotation: %d\n", settings.svgRotation);
   printf("contentsToDrawspace: %d\n\n", settings.contentsToDrawspace);
-}
-
-//original coords are pre rotation scaled and shifted image center. Then shift back around final centerpoint centerX centerY
-float rotateX(TransformSettings* settings, float firstx, float firsty) {
-  float rotatedX = (firstx - settings->originalCenterX) * settings->cosRot - (firsty - settings->originalCenterY) * settings->sinRot + settings->centerX;
-  return rotatedX;
-}
-
-float rotateY(TransformSettings* settings, float firstx, float firsty) {
-  float rotatedY = (firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot + settings->centerY;
-  return rotatedY;
 }
 
 void printGCodeState(GCodeState* state) {
@@ -1208,9 +1189,20 @@ int toolRefresh(int * sp, int * ptIndex, int * pathPointIndex, GCodeState * gcod
   return (!firstPoint(sp, ptIndex, pathPointIndex)) && (gcodeState->trackedDist + *dist > gcodeState->brushDist);
 }
 
+//Shift points to 0,0, then rotate around the origin.
+float rotateX(TransformSettings* settings, float firstx, float firsty) {
+  float rotatedX = ((firstx - settings->originalCenterX) * settings->cosRot - (firsty - settings->originalCenterY) * settings->sinRot);
+  return rotatedX;
+}
+
+float rotateY(TransformSettings* settings, float firstx, float firsty) {
+  float rotatedY = ((firstx - settings->originalCenterX) * settings->sinRot + (firsty - settings->originalCenterY) * settings->cosRot);
+  return rotatedY;
+}
+
 //Rotation/shifting application, and writing is handled in this function.
 void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, TransformSettings * settings, int * ptIndex, char * isClosed, int * machineType, int * sp, int * pathPointIndex, int* pointsWritten) {
-    float rotatedX, rotatedY, feedRate;
+    float feedRate;
     float dist = 0.0;
     
     // Get the unscaled and unrotated coordinates from pathPoints
@@ -1220,35 +1212,20 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     fprintf(gcode, "( Un-Rotated/Scaled X: %f, Y: %f )\n", x, y);
 #endif
 
-    // Scale and shift the coordinates to "Original position". This just needs to be around "originalCenterX/Y"
-    float scaledX = x*settings->scale;
-    float scaledY = y*settings->scale;
-    
-    // Rotate the coordinates if needed
-    if(settings->svgRotation > 0){
-        rotatedX = rotateX(settings, scaledX, scaledY);
-        rotatedY = rotateY(settings, scaledX, scaledY);
-    } else {
-        rotatedX = scaledX;
-        rotatedY = scaledY;
-    }
+    x = (rotateX(settings, x, y) * settings->scale) + settings->centerX;
+    y = -1 * (rotateY(settings, x, y) * settings->scale) - settings->centerY;
 
-    rotatedX = rotatedX;
-    rotatedY = rotatedY;
-
-    rotatedY = -rotatedY;
-    
     int writeReason = -1;
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( Scaled and Rotated X:%f Y:%f )\n", rotatedX, rotatedY);
+    fprintf(gcode, "( Scaled and Rotated X:%f Y:%f )\n", x, y);
 #endif
 
-    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &rotatedX, &rotatedY, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
+    if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &x, &y, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
       gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
       gcodeState->yold = gcodeState->y;
-      gcodeState->x = rotatedX;
-      gcodeState->y = rotatedY;
-      dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, rotatedX, rotatedY);
+      gcodeState->x = x;
+      gcodeState->y = y;
+      dist = distanceBetweenPoints(gcodeState->xold, gcodeState->yold, x, y);
 
       if(!firstPoint(sp, ptIndex, pathPointIndex)){ //Intermediary Point check logic.
         gcodeState->trackedDist += dist;
@@ -1264,8 +1241,8 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
             } else {
               distToPoint = gcodeState->brushDist;
             }
-            dirX = rotatedX - gcodeState->tempx;
-            dirY = rotatedY - gcodeState->tempy;
+            dirX = x - gcodeState->tempx;
+            dirY = y - gcodeState->tempy;
             mag = sqrt(dirX*dirX + dirY*dirY);
             dirX = dirX / mag;
             dirY = dirY / mag;
@@ -1278,7 +1255,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
           }
           gcodeState->countIntermediary += numIntermediary;
           //set tracked dist back to dist from last intermediary point to rotatedX and rotatedY.
-          gcodeState->trackedDist = distanceBetweenPoints(gcodeState->tempx, gcodeState->tempy, rotatedX, rotatedY);
+          gcodeState->trackedDist = distanceBetweenPoints(gcodeState->tempx, gcodeState->tempy, x, y);
         }
 
         gcodeState->totalDist += dist;
@@ -1312,8 +1289,8 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     }
 
     if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
-      gcodeState->firstx = rotatedX;
-      gcodeState->firsty = rotatedY;
+      gcodeState->firstx = x;
+      gcodeState->firsty = y;
       toolDown(gcode, gcodeState, machineType);
       if(gcodeState->colorToFile && gcodeState->colorFileOpen){
         toolDown(color_gcode, gcodeState, machineType);
@@ -1324,10 +1301,10 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
     int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
     float rx1, rx2, ry1, ry2;
-    float x1 = (gcodeState->pathPoints[0]) *settings->scale + settings->shiftX;
-    float y1 = (gcodeState->pathPoints[1]) *settings->scale + settings->shiftY;;
-    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale + settings->shiftX;
-    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale + settings->shiftY;;
+    float x1 = (gcodeState->pathPoints[0]) *settings->scale;
+    float y1 = (gcodeState->pathPoints[1]) *settings->scale;
+    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale;
+    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale;
 
     if(settings->svgRotation > 0) {
         rx1 = rotateX(settings, x1, y1);
