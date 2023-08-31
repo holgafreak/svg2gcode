@@ -749,33 +749,43 @@ TransformSettings calcShiftAndCenter(TransformSettings settings) {
     settings.loadedFileWidth = settings.loadedFileWidth * settings.scale;
     settings.loadedFileHeight = settings.loadedFileHeight * settings.scale;
     printf("Scaled loadedFileWidth: %f Scaled loadedFileHeight: %f\n", settings.loadedFileWidth, settings.loadedFileHeight);
-    settings.shiftX = settings.xMarginLeft; 
-    settings.shiftY = settings.yMarginTop;  
-
+    //Use shifts in centerX and centerY calculations, not originalCenterX/Y calculations.
+    settings.shiftX = settings.xMarginLeft;
+    settings.shiftY = settings.yMarginTop;
+    //Will need to modify shift when contentsToDrawspace. Otherwise, should only have to shift
+    
     // If centering on material, calculate shift
     if (settings.centerOnMaterial) {
         settings.shiftX += (settings.drawSpaceWidth - settings.loadedFileWidth) /2;
         settings.shiftY += (settings.drawSpaceHeight - settings.loadedFileHeight) /2;
         printf("If centerOnMaterial shiftX:%f, shiftY:%f\n", settings.shiftX, settings.shiftY);
     }
+    if(settings.swapDim){
+      float temp = settings.shiftX;
+      settings.shiftX = settings.shiftY;
+      settings.shiftY = temp;
+    }
 
-    // Calculate center of scaled, shifted, and rotated drawing.  Center is (probably) incorrect when calculating with contentsToDrawspace.
-    settings.centerX = settings.shiftX + settings.loadedFileWidth / 2;
-    settings.centerY = settings.shiftY + settings.loadedFileHeight / 2;
+    //Calculating TARGET centerpoint for final drawing.
     if(settings.centerOnMaterial){ //Center on material forces center of svg to center of draw space.
       settings.centerX = settings.xMarginLeft + settings.drawSpaceWidth/2;
       settings.centerY = settings.yMarginTop + settings.drawSpaceHeight/2;
+    } else { //If not centering the final point on material, centerpoint should be shift positions + 1/2 dimension.
+             //Loaded file dimensions have already been scaled so this shoudl work for scaled coordinates.
+      settings.centerX = settings.shiftX + settings.loadedFileWidth/2;
+      settings.centerY = settings.shiftY + settings.loadedFileHeight/2;
+    }
+    if(settings.swapDim){ //need to adjust centerpoint when swapping dim by 90 or 270 degrees
+      float temp = settings.centerX;
+      settings.centerX = settings.centerY;
+      settings.centerY = temp;
     }
     
     //REDO BELOW
-    //originalCenterX and originalCenterY may not correspond with centerX and centerY.
-    //this calculation needs to be rethought.
-    settings.originalCenterX = settings.centerX;
-    settings.originalCenterY = settings.centerY;
-    if(settings.swapDim) { //Wont need to swap dimensions if centering on material.
-        settings.originalCenterX = settings.centerY;
-        settings.originalCenterY = settings.centerX;
-    }
+    //FINDING CENTERPOINT OF PARSED DOCUMENT. SCALED BUT NOT SHIFTED.
+    settings.originalCenterX = settings.loadedFileWidth/2;
+    settings.originalCenterY = settings.loadedFileHeight/2;
+
     //REDO
 
     //original centerX and original centerY are the points at which the scaled and shifted values are centered around
@@ -1210,9 +1220,9 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     fprintf(gcode, "( Un-Rotated/Scaled X: %f, Y: %f )\n", x, y);
 #endif
 
-    // Scale and shift the coordinates
-    float scaledX = x*settings->scale + settings->shiftX;
-    float scaledY = y*settings->scale + settings->shiftY;
+    // Scale and shift the coordinates to "Original position". This just needs to be around "originalCenterX/Y"
+    float scaledX = x*settings->scale;
+    float scaledY = y*settings->scale;
     
     // Rotate the coordinates if needed
     if(settings->svgRotation > 0){
@@ -1222,7 +1232,12 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
         rotatedX = scaledX;
         rotatedY = scaledY;
     }
+
+    rotatedX = rotatedX;
+    rotatedY = rotatedY;
+
     rotatedY = -rotatedY;
+    
     int writeReason = -1;
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Scaled and Rotated X:%f Y:%f )\n", rotatedX, rotatedY);
@@ -1562,10 +1577,11 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
 
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Debug Info for TransformationSettings ) \n");
-  fprintf(gcode, "  ( Calculated Center of Rotated + Scaled Drawing )\n   ( X:%f, Y:%f )\n", settings.centerX, settings.centerY);
-  fprintf(gcode, "  ( Calculated Center for swapped if neccesary )\n   ( X:%f, Y:%f )\n", settings.originalCenterX, settings.originalCenterY);
+  fprintf(gcode, "  ( Center of Rotated + Scaled Drawing )\n   ( X:%f, Y:%f )\n", settings.centerX, settings.centerY);
+  fprintf(gcode, "  ( Original Center )\n   ( X:%f, Y:%f )\n", settings.originalCenterX, settings.originalCenterY);
   fprintf(gcode, "  ( Xmin: %f, XMax: %f, YMin: %f, YMax: %f )\n", bounds[0], bounds[2], bounds[1], bounds[3]);
-  fprintf(gcode, "  ( DrawingWidth: %f, DrawingHeight: %f )\n", generationConfig[9], generationConfig[10]);
+  fprintf(gcode, "  ( Scaled Xmin: %f, XMax: %f, YMin: %f, YMax: %f )\n", bounds[0]*settings.scale, bounds[2]*settings.scale, bounds[1]*settings.scale, bounds[3]*settings.scale);
+  fprintf(gcode, "  ( ShiftX: %f, ShiftY: %f )\n", settings.shiftX, settings.shiftY);
 #endif
 
   points = (SVGPoint*)malloc(pathCount*sizeof(SVGPoint));
