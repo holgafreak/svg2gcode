@@ -1173,10 +1173,11 @@ int canWritePoint(GCodeState * gcodeState, TransformSettings * settings, int * s
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Checking Point: X:%f Y:%f )\n", *px, *py);
 #endif
-  if ((*px < 0 || *px > settings->drawSpaceWidth + settings->xMarginLeft + settings->xMarginRight) || (*py > 0 || *py < -1*(settings->drawSpaceHeight + settings->yMarginTop + settings->yMarginBottom))){
+      //LEFT X BOUND                                             //RIGHT X BOUND                                             //Lower Y BOUND                                               //UPPER Y BOUND
+  if (*px < settings->centerX - (settings->loadedFileWidth/2)*(settings->scale) || *px > settings->centerX + (settings->loadedFileWidth/2)*(settings->scale) || *py > -1*(settings->centerY) + (settings->loadedFileHeight*settings->scale)/2 || *py< -1*(settings->centerY) - (settings->loadedFileHeight*settings->scale)/2){
     gcodeState->pointsCulledBounds++;
      *writeReason = 0;
-    return 1;
+    return 0;
   } else if(firstPoint(sp, ptIndex, pathPointIndex) || lastPoint(sp, ptIndex, pathPointIndex)){ //Always write first and last point in a shape.
     *writeReason = 1;
     return 1;
@@ -1225,7 +1226,8 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 #ifdef DEBUG_OUTPUT
     fprintf(gcode, "( Scaled and Rotated X:%f Y:%f , Scale: %f, CenterX: %f, CenterY: %f )\n", x, y, settings->scale, settings->centerX, settings->centerY);
 #endif
-
+    
+    //Points have been scaled and rotated by this point. CWP can work off paper drawing bounds.
     if(canWritePoint(gcodeState, settings, sp, ptIndex, pathPointIndex, &x, &y, gcode, &writeReason)){ //Can write, if first or last in shape, or if dist is large enough.
       gcodeState->xold = gcodeState->x; //Update state tracking if we are writing.
       gcodeState->yold = gcodeState->y;
