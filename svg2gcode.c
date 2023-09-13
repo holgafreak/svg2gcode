@@ -1296,12 +1296,18 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 #endif
     }
 
-    if(firstPoint(sp, ptIndex, pathPointIndex)){ //if first point written in path
+    if(firstPoint(sp, ptIndex, pathPointIndex) && (writeReason != 0)){ //if first point written in path
       gcodeState->firstx = x;
       gcodeState->firsty = y;
       toolDown(gcode, gcodeState, machineType);
       if(gcodeState->colorToFile && gcodeState->colorFileOpen){
         toolDown(color_gcode, gcodeState, machineType);
+      }
+    }
+    if(lastPoint(sp, ptIndex, pathPointIndex) && (writeReason != 0)){
+      toolUp(gcode, gcodeState, machineType);
+      if(gcodeState->colorFileOpen && gcodeState->colorToFile){
+        toolUp(color_gcode, gcodeState, machineType);
       }
     }
   }
@@ -1417,10 +1423,6 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     fprintf(gcode, "( Points Written: %d )\n", pointsWritten);
 #endif
 
-    toolUp(gcode, gcodeState, machineTypePtr);
-    if(gcodeState->colorFileOpen && gcodeState->colorToFile){
-      toolUp(color_gcode, gcodeState, machineTypePtr);
-    }
 }
 
 void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
