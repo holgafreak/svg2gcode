@@ -46,6 +46,7 @@
 
 //#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
+//#define DEBUG_SP
 #define BTSVG
 #define MAX_BEZ 128 //64;
 #define BUFFER_SIZE 8192 //Character buffer size for writing to files.
@@ -1096,9 +1097,13 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == 2 || machineType == 1){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == 1){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
+        fprintf(gcode, "M0\n");
+      } else if (machineType == 2){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+        fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
+        fprintf(gcode, "G0 Z%f\nG0 X11.4\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
       }
       
@@ -1131,7 +1136,13 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
 
   gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
   //send paper to front
-  fprintf(gcode, "G0 X0 Y0\n");
+  
+  if(machineType == 2){
+    fprintf(gcode, "G0 X11.4 Y0\n");
+  } else {
+    fprintf(gcode, "G0 X0 Y0\n");
+  }
+
   if(machineType == 0){
     fprintf(gcode, "M5\nM30\n");
   } else if(machineType == 1 || machineType == 2){
@@ -1315,23 +1326,16 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *settings, int pathPointsIndex) {
     int res = 0; //Set to 1 if end is closer to last x and y points in gcodestate, 0 if start is closer.
     float rx1, rx2, ry1, ry2;
-    float x1 = (gcodeState->pathPoints[0]) *settings->scale;
-    float y1 = (gcodeState->pathPoints[1]) *settings->scale;
-    float x2 = (gcodeState->pathPoints[pathPointsIndex-2]) *settings->scale;
-    float y2 = (gcodeState->pathPoints[pathPointsIndex-1]) *settings->scale;
+    float x1 = rotateX(settings, gcodeState->pathPoints[0] - settings->originalCenterX, gcodeState->pathPoints[1] - settings->originalCenterY);
+    float y1 = rotateY(settings, gcodeState->pathPoints[0] - settings->originalCenterX, gcodeState->pathPoints[1] - settings->originalCenterY);
+    float x2 = rotateX(settings, gcodeState->pathPoints[pathPointsIndex-2] - settings->originalCenterX, gcodeState->pathPoints[pathPointsIndex-1] - settings->originalCenterY);
+    float y2 = rotateY(settings, gcodeState->pathPoints[pathPointsIndex-2] - settings->originalCenterX, gcodeState->pathPoints[pathPointsIndex-1] - settings->originalCenterY);
 
-    if(settings->svgRotation > 0) {
-        rx1 = rotateX(settings, x1, y1);
-        ry1 = rotateY(settings, x1, y1);
-        rx2 = rotateX(settings, x2, y2);
-        ry2 = rotateY(settings, x2, y2);
-    } else {
-        rx1 = x1;
-        ry1 = y1;
-        rx2 = x2;
-        ry2 = y2;
-    }
-    
+    rx1 = (x1 * settings->scale) + settings->centerX;
+    rx2 = (x2 * settings->scale) + settings->centerX;
+    ry1 = (y1 * settings->scale) + settings->centerY;
+    ry2 = (y2 * settings->scale) + settings->centerY;
+
     ry1 = -ry1;
     ry2 = -ry2;
     
@@ -1340,6 +1344,11 @@ int nearestStartPoint(FILE *gcode, GCodeState *gcodeState, TransformSettings *se
     if (distFromEnd < distFromStart){
       res = 1;
     }
+
+#ifdef DEBUG_SP
+    fprintf(gcode, "(Start Point: rx1=%.2f, ry1=%.2f, End Point: rx2=%.2f, ry2=%.2f, gcodeState Point: x=%.2f, y=%.2f)\n",
+            rx1, ry1, rx2, ry2, gcodeState->x, gcodeState->y);
+#endif
 
     return res;
 }
@@ -1408,12 +1417,13 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     fprintf(gcode, "( Shape %d at i:%d. Color: %i. Scale: %f, ShiftX: %f, ShiftY: %f, Rotation: %d )\n", shapes[*i].id, *i, shapes[*i].stroke, settings->scale, settings->shiftX, settings->shiftY, settings->svgRotation*90);
     fprintf(gcode, "( NumPoints: %d, PathPointsIndex: %d, SP: %d )\n", pathPointsIndex/2, pathPointsIndex, sp);
 #endif
-    if(sp){
+    fprintf(gcode, "( SP For Debug: %d )\n", sp);
+    if(sp){ //If endpoint is closer.
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
         writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
       }
-    } else {
+    } else { //If start point is closer.
       for(int z = 0; z < pathPointsIndex; z += 2){
         // Print out point before writing
         writePoint(gcode, color_gcode, gcodeState, settings, &z, &isClosed, machineTypePtr, &sp, &pathPointsIndex, &pointsWritten);
