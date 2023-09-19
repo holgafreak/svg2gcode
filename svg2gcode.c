@@ -1417,7 +1417,9 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     fprintf(gcode, "( Shape %d at i:%d. Color: %i. Scale: %f, ShiftX: %f, ShiftY: %f, Rotation: %d )\n", shapes[*i].id, *i, shapes[*i].stroke, settings->scale, settings->shiftX, settings->shiftY, settings->svgRotation*90);
     fprintf(gcode, "( NumPoints: %d, PathPointsIndex: %d, SP: %d )\n", pathPointsIndex/2, pathPointsIndex, sp);
 #endif
+#ifdef DEBUG_SP
     fprintf(gcode, "( SP For Debug: %d )\n", sp);
+#endif
     if(sp){ //If endpoint is closer.
       for(int z = pathPointsIndex-2; z >= 0; z-=2){ //write backwards if sp, forwards if else.
         // Print out point before writing
