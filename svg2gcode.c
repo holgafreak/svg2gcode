@@ -1166,7 +1166,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 #endif
   fprintf(gcode, "( XY Feedrate: %d, Z Feedrate: %d )\n", gcodeState->feed, gcodeState->zFeed);
   fprintf(gcode, "( WriteHeight: %f, TravelHeight: %f )\n", gcodeState->zFloor, gcodeState->ztraverse);
-  fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin:%f )\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
+  fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin: %f )\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
   fprintf(gcode, "( Paper Width: %f, Paper Height: %f )\n", settings->paperWidth, settings->paperHeight);
   fprintf(gcode, "( Number of Paths in File: %d )\n\n", gcodeState->npaths);
 
