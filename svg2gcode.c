@@ -1010,7 +1010,7 @@ void toolDown(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
 }
 
 void toolUp(FILE * gcode, GCodeState * gcodeState, int * machineTypePtr){
-  fprintf(gcode, "G1 Z%f F%d\n", gcodeState->ztraverse, gcodeState->zFeed);
+  fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
 }
 
 char* uint_to_hex_string(unsigned int num) {
