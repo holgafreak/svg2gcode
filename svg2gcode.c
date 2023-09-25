@@ -131,6 +131,8 @@ typedef struct TransformSettings {
     int svgRotation;
     int contentsToDrawspace;
     float* pointBounds;
+    float paperWidth;
+    float paperHeight;
 } TransformSettings;
 
 typedef struct GCodeState {
@@ -799,6 +801,8 @@ TransformSettings calcTransform(NSVGimage * g_image, float * paperDimensions, in
   settings.contentsToDrawspace = generationConfig[10];
   float width = paperDimensions[9];
   float height = paperDimensions[10];
+  settings.paperWidth = paperDimensions[0];
+  settings.paperHeight = paperDimensions[1];
   settings.pointsToDocumentScale = 1;
 
   settings.loadedFileWidth = width; //Width and height of svg from frontend.
@@ -1162,8 +1166,9 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 #endif
   fprintf(gcode, "( XY Feedrate: %d, Z Feedrate: %d )\n", gcodeState->feed, gcodeState->zFeed);
   fprintf(gcode, "( WriteHeight: %f, TravelHeight: %f )\n", gcodeState->zFloor, gcodeState->ztraverse);
-  fprintf(gcode, "( Number of Paths in File: %d )\n", gcodeState->npaths);
-  fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin:%f )\n\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
+  fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin:%f )\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
+  fprintf(gcode, "( Paper Width: %f, Paper Height: %f )\n", settings->paperWidth, settings->paperHeight);
+  fprintf(gcode, "( Number of Paths in File: %d )\n\n", gcodeState->npaths);
 
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90); //Default header for job
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
