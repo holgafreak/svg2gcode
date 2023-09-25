@@ -1160,6 +1160,11 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
 #ifdef DEBUG_OUTPUT
   fprintf(gcode, "( Machine Type: %i )\n", machineType);
 #endif
+  fprintf(gcode, "( XY Feedrate: %d, Z Feedrate: %d )\n", gcodeState->feed, gcodeState->zFeed);
+  fprintf(gcode, "( WriteHeight: %f, TravelHeight: %f )\n", gcodeState->zFloor, gcodeState->ztraverse);
+  fprintf(gcode, "( Number of Paths in File: %d )\n", gcodeState->npaths);
+  fprintf(gcode, "( Left Margin: %f, Right Margin, %f, Top Margin: %f, Bottom Margin:%f )\n\n", settings->xMarginLeft, settings->xMarginRight, settings->yMarginTop, settings->yMarginTop);
+
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90); //Default header for job
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
 
@@ -1613,21 +1618,29 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   clock_t start_sa, stop_sa;
   double reorder_time;
 
-  printf("Paths %d Points %d\n",pathCount, pointsCount);
-  start_sa = clock();
-  simulatedAnnealing(shapes, points, pathCount, initialTempExp, coolingRate, gcodeState.quality, saNumComp);
+  int reorder_paths = 1;
+  int reorder_colors = 1;
 
-  stop_sa = clock();
-  reorder_time = ((double) (stop_sa - start_sa)) / CLOCKS_PER_SEC;
+  if(reorder_paths){
+    printf("Paths %d Points %d\n",pathCount, pointsCount);
+    start_sa = clock();
+    simulatedAnnealing(shapes, points, pathCount, initialTempExp, coolingRate, gcodeState.quality, saNumComp);
 
-  printf("Finished Path-Opt\n");
+    stop_sa = clock();
+    reorder_time = ((double) (stop_sa - start_sa)) / CLOCKS_PER_SEC;
+
+    printf("Finished Path-Opt\n");
+  }
+  
   fflush(stdout);
 
-  printf("Sorting shapes by color\n");
-  int mergeCount = 0;
-  mergeSort(shapes, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount); //this is stable and can be called on subarrays.
-  printf("Completed mergeSort\n");
-  fflush(stdout);
+  if(reorder_colors){
+    printf("Sorting shapes by color\n");
+    int mergeCount = 0;
+    mergeSort(shapes, 0, pathCount-1, 0, &mergeCount, penColors, penColorCount); //this is stable and can be called on subarrays.
+    printf("Completed mergeSort\n");
+    fflush(stdout);
+  }
 
   //create char buffer for shapes
 
