@@ -55,7 +55,7 @@
 #define AVG_OPT_WINDOW 10 //Sliding window size for path optimization.
 #define MAX_OPT_SECONDS 1200 //20 Minute limit for opt function
 #define NUM_TOOLS 6
-#define DOUGLAS_PEUCKER_EPSILON 0.1 //in mm
+#define DOUGLAS_PEUCKER_EPSILON 0.05 //in mm
 
 #include <stdio.h>
 #include <math.h>
@@ -1228,7 +1228,7 @@ void writePoint(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
     float dist = 0.0;
     
 #ifdef DEBUG_OUTPUT
-    fprintf(gcode, "( Un-Rotated/Un-Scaled X: %f, Y: %f )\n", raw_x, raw_y);
+    fprintf(gcode, "( Un-Rotated/Un-Scaled X: %f, Y: %f )\n", gcodeState->pathPoints[(*ptIndex)], gcodeState->pathPoints[(*ptIndex)+1]);
 #endif
 
     float x = rotateX(settings, gcodeState->pathPoints[*ptIndex] - settings->originalCenterX, gcodeState->pathPoints[(*ptIndex)+1] - settings->originalCenterY);
@@ -1481,7 +1481,6 @@ void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], fl
         printf("\t%d: %d\n", i, generationConfig[i]);
     }
 }
-
 
 int compareShapes(const void* a, const void* b) {
     Shape* shapeA = (Shape*) a;
