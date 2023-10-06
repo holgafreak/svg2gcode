@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-//#define DEBUG_OUTPUT
+#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 //#define DEBUG_SP
 #define BTSVG
@@ -1051,7 +1051,7 @@ void writeToolOffset(FILE* gcode, int tool){
 }
 
 void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int numTools, Pen* penList, int* penColorCount, Shape* shapes, int * i) {
-  if(machineType == 0 || machineType == 2 || machineType == 1){ //All machines will want to check for tool change eventually.
+  if(machineType == MACHINE_6COLOR || machineType == MACHINE_MVP_8_5 || machineType == MACHINE_LFP_24_36){ //All machines will want to check for tool change eventually.
     gcodeState->targetColor = shapes[*i].stroke;
     //Hopefully this sets target tool without looking at currTool. Target tool shouldnt change as long as shape[*i].color is same as prev.
     gcodeState->targetColor = shapes[*i].stroke;
@@ -1081,7 +1081,7 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
         fprintf(gcode, "G53\n");
       }
 
-      if(machineType == 0){ //Tool change routine for 6-Color rotary.
+      if(machineType == MACHINE_6COLOR){ //Tool change routine for 6-Color rotary.
         if(gcodeState->currTool >= 0){
           fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60);
           fprintf(gcode, "G1 Z%i F%i\n", 0, gcodeState->zFeed);
@@ -1101,11 +1101,11 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
           fprintf(gcode, "G1 X%f F%d\n", gcodeState->toolChangePos ,gcodeState->slowTravel);
           fprintf(gcode, "G1 X0 F%d\n", gcodeState->slowTravel);
         }
-      } else if (machineType == 1){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == MACHINE_LFP_24_36){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X0\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
-      } else if (machineType == 2){ //Pause command for MVP and LFP. Move to 0,0 and pause.
+      } else if (machineType == MACHINE_MVP_8_5){ //Pause command for MVP and LFP. Move to 0,0 and pause.
         fprintf(gcode, "( MVP PAUSE COMMAND TOOL:%d )\n", gcodeState->targetTool);
         fprintf(gcode, "G0 Z%f\nG0 X11.4\nG0 Y0\n", gcodeState->ztraverse);
         fprintf(gcode, "M0\n");
@@ -1127,11 +1127,11 @@ void writeToolchange(GCodeState* gcodeState, int machineType, FILE* gcode, int n
 }
 
 void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End of job footer + cleanup.
-  if (machineType == 0){ //Lift to zero for tool dropoff after job
+  if (machineType == MACHINE_6COLOR){ //Lift to zero for tool dropoff after job
     fprintf(gcode, "G1 Z%.1f F%i\n", 0.0, gcodeState->zFeed);
   }
   //drop off current tool
-  if(machineType == 0){ //6Color
+  if(machineType == MACHINE_6COLOR){ //6Color
     fprintf(gcode, "G1 A%d\n", gcodeState->currTool*60); //rotate to current color slot
     fprintf(gcode, "G0 X0\n"); //rapid move to close to tool changer
     fprintf(gcode, "G1 X%f\n", gcodeState->toolChangePos); //slow move to dropoff
@@ -1141,7 +1141,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
 
   //send paper to front
-  if(machineType == 2){
+  if(machineType == MACHINE_MVP_8_5){
     fprintf(gcode, "G0 X11.4 Y0\n");
     fprintf(gcode, "M0\n");
     fprintf(gcode, "G0 Y-82.493\n");
@@ -1149,9 +1149,9 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
     fprintf(gcode, "G0 X0 Y0\n");
   }
 
-  if(machineType == 0){
+  if(machineType == MACHINE_6COLOR){
     fprintf(gcode, "M5\nM30\n");
-  } else if(machineType == 1 || machineType == 2){
+  } else if(machineType == MACHINE_LFP_24_36 || machineType == MACHINE_MVP_8_5){
     fprintf(gcode,"M5\nM2\n");
   }
 
@@ -1176,7 +1176,7 @@ void writeHeader(GCodeState* gcodeState, FILE* gcode, TransformSettings* setting
   fprintf(gcode, "G90\nG0 M3 S%d\n", 90); //Default header for job
   fprintf(gcode, "G0 Z%f\n", gcodeState->ztraverse);
 
-  if(machineType == 0 || machineType == 2) { //6Color or MVP job paper back and forth.
+  if(machineType == MACHINE_6COLOR || machineType == MACHINE_MVP_8_5) { //6Color or MVP job paper back and forth.
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
     fprintf(gcode, "G1 Y%f F%d\n", (-1.0*(settings->drawSpaceHeight + settings->yMarginTop - 10)), gcodeState->feedY);
     fprintf(gcode, "G1 Y0 F%i\n", gcodeState->feedY);
@@ -1498,7 +1498,12 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
+  printf("Machine Type MVP_8: %d\n", MACHINE_MVP_8_5);
+  printf("Machine Type MVP_12: %d\b", MACHINE_MVP_12);
+  printf("Machine Type Turtle: %d\n", MACHINE_TURTLE);
+  printf("Machine Type LFP 24x36: %d\n", MACHINE_LFP_24_36);
 #endif
+
   int i, j, k, l = 1;
   SVGPoint* points;
   ToolPath* toolPaths;
