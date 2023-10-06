@@ -996,7 +996,7 @@ GCodeState initializeGCodeState(float* paperDimensions, int* generationConfig, i
   state.colorToFile = 1;
   state.pathPointsBufIndex = 0;
 
-  for(int i = 0; i < 6; i++){
+  for(int i = 0; i < numTools; i++){
     state.colorCount += penColorCount[i];
   }
 
@@ -1139,10 +1139,12 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   }
 
   gcodeState->totalDist = gcodeState->totalDist/1000; //conversion to meters
+
   //send paper to front
-  
   if(machineType == 2){
     fprintf(gcode, "G0 X11.4 Y0\n");
+    fprintf(gcode, "M0\n");
+    fprintf(gcode, "G0 Y-82.493\n");
   } else {
     fprintf(gcode, "G0 X0 Y0\n");
   }
@@ -1152,6 +1154,7 @@ void writeFooter(GCodeState* gcodeState, FILE* gcode, int machineType) { //End o
   } else if(machineType == 1 || machineType == 2){
     fprintf(gcode,"M5\nM2\n");
   }
+
   fprintf(gcode, "( Total distance traveled = %f m)\n", gcodeState->totalDist);
   fprintf(gcode, "( Intermediary Points: %d )\n", gcodeState->countIntermediary);
   fprintf(gcode, "( PointsCulledPrec: = %d, PointsCulledBounds: = %d)\n", gcodeState->pointsCulledPrec, gcodeState->pointsCulledBounds);
@@ -1447,7 +1450,7 @@ void writeShape(FILE * gcode, FILE* color_gcode, GCodeState * gcodeState, Transf
 
 }
 
-void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[9]) {
+void printArgs(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[7], int generationConfig[14]) {
     int i, j;
 
     printf("argc:\n\t%d\n", argc);
@@ -1491,7 +1494,7 @@ int compareShapes(const void* a, const void* b) {
 //Paper Dimensions: {s.paperX(), s.paperY(), s.xMargin(), s.yMargin(), s.zEngage(), s.penLift(), s.precision(), s.xMarginRight(), s.yMarginBottom()}
 //Generation Config: {scaleToMaterialInt, centerOnMaterialInt, s.svgRotation(), s.machineSelection(), s.quality(), s.xFeedrate(), s.yFeedrate(), s.zFeedrate(), s.quality()}
 
-int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[12], char* fileName) {
+int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6], float paperDimensions[9], int generationConfig[14], char* fileName) {
   printf("In Generate GCode\n");
 #ifdef DEBUG_OUTPUT
   printArgs(argc, argv, penColors, penColorCount, paperDimensions, generationConfig);
@@ -1622,8 +1625,8 @@ int generateGcode(int argc, char* argv[], int** penColors, int penColorCount[6],
   clock_t start_sa, stop_sa;
   double reorder_time;
 
-  int reorder_paths = 1;
-  int reorder_colors = 1;
+  int reorder_paths = generationConfig[12];
+  int reorder_colors = generationConfig[13];
 
   if(reorder_paths){
     printf("Paths %d Points %d\n",pathCount, pointsCount);
