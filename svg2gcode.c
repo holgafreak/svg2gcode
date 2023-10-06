@@ -44,7 +44,7 @@
 #include "svg2gcode.h"
 
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 //#define DP_DEBUG_OUTPUT
 //#define DEBUG_SP
 #define BTSVG
